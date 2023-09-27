@@ -25,10 +25,10 @@ VOLUP  = 8  # (24) Adjust volume UP whilst playing, set RANDOM ON/OFF whilst sto
 SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
 
 
-At boot it will look for mp3 tracks in '/home/<<user>>/Music/artist name/album_name/tracks', 
-and/or on USB sticks, under /media/<<user>>/usb_stick_name/artist name/album_name/tracks
+At boot it will look for mp3 tracks in '/home/USER/Music/artist name/album_name/tracks', 
+and/or on USB sticks, under /media/USER/usb_stick_name/artist name/album_name/tracks
 
-To install copy Pi_OLED_MP3_player.py to /home/<<user>>
+To install copy Pi_OLED_MP3_player.py to /home/USER
 
 sudo apt-get install mplayer
 
