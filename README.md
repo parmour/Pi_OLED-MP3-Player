@@ -10,7 +10,7 @@ All buttons are connected between gpios and gnd (1k resistors in series are usua
 
 6 button switches, PREVIOUS,PLAY,NEXT,VOLUME DOWN, VOLUME UP,SLEEP but they have multi purposes as shown.
 
-# GPIO BUTTONS GPIO BCM numbers (Physical pin numbers)
+## GPIO BUTTONS GPIO BCM numbers (Physical pin numbers)
 
 PREV   = 20 # (38) PREVIOUS TRACK  (whilst playing) / PREV ALBUM (whilst stopped) / PREV ARTIST (HOLD for 5 secs whilst stopped) 
 
@@ -23,6 +23,8 @@ VOLDN  = 16 # (36) Adjust volume DOWN whilst playing, set GAPLESS ON/OFF whilst 
 VOLUP  = 8  # (24) Adjust volume UP whilst playing, set RANDOM ON/OFF whilst stopped
 
 SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
+
+Holding down PREV or NEXT and SLEEP will step through ARTISTS A-Z 
 
 
 At boot it will look for mp3 tracks in '/home/USER/Music/artist name/album_name/tracks', 
