@@ -1,6 +1,6 @@
 # Pi_OLED-MP3-Player
 
-A simple MP3 Player and Internet Radio Player using a Raspberry Pi, 6 buttons, and 1 OLED
+A simple MP3 Player and Internet Radio Player using a Raspberry Pi, 6 buttons, and 1 SSD1306 OLED
 
 All buttons are connected between gpios and gnd (1k resistors in series are usually recommended), OLED connected as shown. 
 
