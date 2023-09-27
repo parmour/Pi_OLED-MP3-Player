@@ -23,9 +23,13 @@ sudo pip3 install mutagen
 and then
 
  To install SSD1306 driver...
+ 
  git clone https://github.com/adafruit/Adafruit_Python_SSD1306.git
+ 
  cd Adafruit_Python_SSD1306
+ 
  sudo python setup.py install
+ 
  reboot
 
 
