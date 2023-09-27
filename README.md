@@ -6,7 +6,7 @@ All buttons are connected between gpios and gnd (1k resistors in series are usua
 
 ## schematic
 
-![schematic](schematic.jpg)
+![schematic](oled_schematic.jpg)
 
 6 button switches, PREVIOUS,PLAY,NEXT,VOLUME DOWN, VOLUME UP,SLEEP but they have multi purposes as shown.
 
