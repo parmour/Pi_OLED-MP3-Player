@@ -6,6 +6,8 @@ NOTE Use pi OS based on Bullseye, no oled driver for bookworm found yet.
 
 All buttons are connected between gpios and gnd (1k resistors in series are usually recommended), OLED connected as shown. 
 
+compatible with https://shop.pimoroni.com/products/audio-dac-shim-line-out?variant=32343184965715
+
 ## schematic
 
 ![schematic](oled_schematic.jpg)
