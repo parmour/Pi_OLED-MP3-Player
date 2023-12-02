@@ -54,5 +54,7 @@ and then
  
  reboot
 
+ setup audio output as required.
+
 
 
