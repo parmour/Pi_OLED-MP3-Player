@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Copyright (c) 2023
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,6 +33,8 @@ from signal import signal, SIGTERM, SIGHUP, pause
 # git clone https://github.com/adafruit/Adafruit_Python_SSD1306.git
 # cd Adafruit_Python_SSD1306
 # sudo python setup.py install
+#
+# Enable I2C on Pi. Pi Menu > Preferences > RPI Configuration > Interfaces > I2C
 # reboot
 
 import Adafruit_SSD1306
@@ -40,7 +42,7 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-version  = "1.0"
+version  = "1.1"
 
 # set default variables (saved in config_file and overridden at future startups)
 MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
@@ -181,15 +183,16 @@ def display():
 
 display()
 time.sleep(2)
-
+stop = 0
 def reload():
-    global tracks,x,top,msg1,msg2,Track_No
+  global tracks,x,top,msg1,msg2,Track_No,stop
+  if stop == 0:
     tracks  = []
     msg1 = "Tracks: " + str(len(tracks))
     msg2 = "Reloading tracks... "
     display()
-    sd_tracks  = glob.glob("/media/" + h_user[0] + "/*/*/*/*.mp3")
-    usb_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
+    usb_tracks  = glob.glob("/media/" + h_user[0] + "/*/*/*/*.mp3")
+    sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
     titles = [0,0,0,0,0,0,0]
     if len(sd_tracks) > 0:
       for xx in range(0,len(sd_tracks)):
@@ -201,7 +204,8 @@ def reload():
         titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = usb_tracks[xx].split("/")
         track = titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2] + "/" + titles[3]
         tracks.append(track)
-    tracks.sort()
+    if len(tracks) > 0:
+        tracks.sort()
     with open('tracks.txt', 'w') as f:
         for item in tracks:
             f.write("%s\n" % item)
@@ -212,6 +216,11 @@ def reload():
         for item in defaults:
             f.write("%s\n" % item)
     display()
+    if len(tracks) == 0:
+        msg1 = "Tracks: " + str(len(tracks))
+        msg2 = "Stopped "
+        display()
+        stop = 1
     time.sleep(2)
 
 def Set_Volume():
@@ -335,7 +344,7 @@ if use_USB == 1:
         msg2 = ""
         display()
 
-if reloading == 1:
+if reloading == 1 and usb_found > 0 and stop == 0:
     reload()
 
 # check for audio mixers
@@ -352,7 +361,7 @@ if len(alsaaudio.mixers()) > 0:
         
 # load MP3 tracks
 tracks  = []
-if not os.path.exists('tracks.txt'):
+if not os.path.exists('tracks.txt') and stop == 0:
     reload()
 else:
     with open("tracks.txt", "r") as file:
@@ -378,12 +387,13 @@ if radio == 1:
     display()
 
 # try reloading tracks if one selected not found
-titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
-if not os.path.exists (track):
-    reload()
+if len(tracks) > 0:
+    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
+    track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
+    if not os.path.exists (track) and usb_found > 0 and stop == 0:
+        reload()
 
-if album_mode == 1:
+if album_mode == 1 and len(tracks) > 0:
     # determine album length and number of tracks
     cplayed = 0
     shuffled = 0
@@ -422,7 +432,8 @@ elif shuffled == 1 and gapless != 0:
 elif shuffled == 0 and gapless != 0:
     gap = gaptime
 
-titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
+if len(tracks) > 0:
+    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
 
 sleep_timer_start = time.monotonic()
 Disp_start        = time.monotonic()
@@ -473,7 +484,7 @@ while True:
                 pass
             
         # display Artist / Album / Track names
-        if time.monotonic() - timer2 > 3 and Disp_on == 1:
+        if time.monotonic() - timer2 > 3 and Disp_on == 1 and len(tracks) > 0:
             msg2 = titles[0][0:19]
             msg3 = titles[1][0:19]
             msg4 = titles[2][0:19]
@@ -600,7 +611,7 @@ while True:
             sleep_timer = 0
             while GPIO.input(PLAY) == 0 and time.monotonic() - timer1 < 5:
                 pass
-            if time.monotonic() - timer1 < 5:
+            if time.monotonic() - timer1 < 5 and len(tracks) > 0:
                 # determine album length and number of tracks
                 cplayed = 0
                 if album_mode == 1:
@@ -1305,12 +1316,16 @@ while True:
             Disp_start = time.monotonic()
             q.kill()
             radio = 0
-            msg1 = "Play.." + str(track_n)[0:5] + "   S"
+            if len(tracks) > 0:
+                msg1 = "Play.." + str(track_n)[0:5] + "   S"
+            else:
+                msg1 = "Radio Stopped      "
             display()
             defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
             with open(config_file, 'w') as f:
                 for item in defaults:
                     f.write("%s\n" % item)
+            time.sleep(2)
             
 
         # check for sleep_timer key
@@ -1454,17 +1469,18 @@ while True:
                 time.sleep(1)
                 
         # try reloading tracks if none found
-        if len(tracks) == 0:
+        if len(tracks) == 0 and stop == 0:
             reload()
             
         # try reloading tracks if one selected not found
-        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-        track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
-        if not os.path.exists (track) :
-            reload()
+        if len(tracks) > 0:
+            titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
+            track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
+            if not os.path.exists (track) and stop == 0 :
+                reload()
             
         # play selected track
-        if MP3_Play == 1:
+        if MP3_Play == 1 and len(tracks) > 0:
           titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
           if album_mode == 0:
               track_n = str(Track_No + 1) + "     "
