@@ -2,6 +2,8 @@
 
 A simple MP3 Player and Internet Radio Player using a Raspberry Pi, 6 buttons, and 1 SSD1306 OLED
 
+NOTE Use pi OS based on Bullseye, no oled driver for bookworm found yet.
+
 All buttons are connected between gpios and gnd (1k resistors in series are usually recommended), OLED connected as shown. 
 
 ## schematic
