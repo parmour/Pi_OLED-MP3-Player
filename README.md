@@ -49,6 +49,8 @@ and then
  cd Adafruit_Python_SSD1306
  
  sudo python setup.py install
+
+ Enable I2C on Pi. Pi Menu >>  Preferences >> Raspberry Pi Configuration >> Interfaces >> I2C
  
  reboot
 
