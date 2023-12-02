@@ -38,6 +38,8 @@ sudo apt-get install mplayer
 
 sudo pip3 install mutagen
 
+sudo apt install python3-alsaaudio
+
 and then
 
  To install SSD1306 driver...
