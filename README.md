@@ -58,6 +58,8 @@ and then
 
  setup audio output as required.
 
+ setup wifi connection if required.
+
  to run at boot add /usr/bin/python3 /home/USERNAME/Pi_OLED_MP3_Player.py to /etc/xdg/lxsession/LXDE-pi/autostart
 
 
