@@ -34,7 +34,7 @@ Holding down NEXT and SLEEP will step through ARTISTS A-Z (whilst stopped)
 At boot it will look for mp3 tracks in '/home/USER/Music/artist name/album_name/tracks', 
 and/or on USB sticks, under /media/USER/usb_stick_name/artist name/album_name/tracks
 
-To install copy Pi_OLED_MP3_player.py to /home/USER
+To install copy Pi_OLED_MP3_player.py to /home/USERNAME
 
 sudo apt-get install mplayer
 
