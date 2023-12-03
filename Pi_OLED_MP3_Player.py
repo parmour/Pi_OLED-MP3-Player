@@ -17,7 +17,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
-import RPi.GPIO as GPIO
+from gpiozero import Button
 import glob
 import subprocess
 import os, sys
@@ -42,7 +42,7 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-version  = "1.1"
+version  = "1.2"
 
 # set default variables (saved in config_file and overridden at future startups)
 MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
@@ -134,13 +134,12 @@ if os.path.exists ("radio_stns.txt"):
 
 
 # setup GPIO
-GPIO.setwarnings(False)
-GPIO.setup(PREV ,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(PLAY ,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(NEXT ,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(VOLDN,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(VOLUP,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(SLEEP,GPIO.IN,pull_up_down=GPIO.PUD_UP)
+buttonPREV  = Button(PREV)
+buttonPLAY  = Button(PLAY)
+buttonNEXT  = Button(NEXT)
+buttonVOLDN = Button(VOLDN)
+buttonVOLUP = Button(VOLUP)
+buttonSLEEP = Button(SLEEP)
 
 # initialise parameters
 old_album   = 0
@@ -218,10 +217,10 @@ def reload():
     display()
     if len(tracks) == 0:
         msg1 = "Tracks: " + str(len(tracks))
-        msg2 = "Stopped "
+        msg2 = "Stopped Checking"
         display()
         stop = 1
-    time.sleep(2)
+    time.sleep(1)
 
 def Set_Volume():
     global mixername,m,msg1,msg2,msg3,msg4,MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless
@@ -229,7 +228,7 @@ def Set_Volume():
     msg2 = ""
     msg3 = ""
     msg4 = ""
-    while GPIO.input(VOLUP) == 0:
+    while buttonVOLUP.is_pressed:
         volume +=1
         volume = min(volume,100)
         m.setvolume(volume)
@@ -238,7 +237,7 @@ def Set_Volume():
         os.system("amixer -D pulse sset Master " + str(volume) + "%")
         if mixername == "DSP Program":
             os.system("amixer set 'Digital' " + str(volume + 107))
-    while GPIO.input(VOLDN) == 0:
+    while buttonVOLDN.is_pressed:
         volume -=1
         volume = max(volume,0)
         m.setvolume(volume)
@@ -311,7 +310,7 @@ if use_USB == 1:
     start = time.monotonic()
     msg1 = ("Checking for USB")
     display()
-    while time.monotonic() - start < usb_timer and GPIO.input(PLAY) == 1:
+    while time.monotonic() - start < usb_timer:
         usb = glob.glob("/media/" +  h_user[0] + "/*")
         usb_found = len(usb)
         msg2 = "Found: " + str(usb_found) + " USBs"
@@ -341,10 +340,11 @@ if use_USB == 1:
         msg2 = "No USB Found !!"
         display()
         time.sleep(2)
+        reloading = 1
         msg2 = ""
         display()
 
-if reloading == 1 and usb_found > 0 and stop == 0:
+if reloading == 1 and stop == 0:
     reload()
 
 # check for audio mixers
@@ -565,7 +565,7 @@ while True:
                 else:
                     msg2 = "STOPPING in " + str(t)
                 display()
-                if GPIO.input(SLEEP) == 0 or GPIO.input(PLAY) == 0:
+                if buttonSLEEP.is_pressed or buttonPLAY.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -597,7 +597,7 @@ while True:
             Disp_start = time.monotonic()
             
         # check for PLAY key
-        if GPIO.input(PLAY) == 0:
+        if buttonPLAY.is_pressed:
             stopped = 0
             Disp_on = 1
             Disp_start = time.monotonic()
@@ -609,7 +609,7 @@ while True:
             display()
             time.sleep(0.5)
             sleep_timer = 0
-            while GPIO.input(PLAY) == 0 and time.monotonic() - timer1 < 5:
+            while buttonPLAY.is_pressed and time.monotonic() - timer1 < 5:
                 pass
             if time.monotonic() - timer1 < 5 and len(tracks) > 0:
                 # determine album length and number of tracks
@@ -646,7 +646,7 @@ while True:
                 msg1 = (Radio_Stns[radio_stn])
                 display()
                 rs = Radio_Stns[radio_stn]
-                while GPIO.input(PLAY) == 0:
+                while buttonPLAY.is_pressed:
                     pass
                 time.sleep(1)
                 radio    = 1
@@ -657,7 +657,7 @@ while True:
                         f.write("%s\n" % item)
                 
         # check NEXT ALBUM / ARTIST key
-        if  GPIO.input(NEXT) == 0:
+        if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
             while titles[1] == old_album and titles[0] == old_artist:
@@ -693,10 +693,10 @@ while True:
             display()
             timer3 = time.monotonic()
             album = 1
-            while GPIO.input(NEXT) == 0:
+            while buttonNEXT.is_pressed:
                 # NEXT ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
-                    if GPIO.input(SLEEP) == 1:
+                    if buttonSLEEP.is_pressed == 0:
                         while titles[0] == old_artist:
                             Track_No +=1
                             if Track_No > len(tracks) - 1:
@@ -766,7 +766,7 @@ while True:
             timer2 = time.monotonic()
                         
         # check for VOLUP  key
-        if  GPIO.input(VOLUP) == 0 and Disp_on == 0:
+        if buttonVOLUP.is_pressed and Disp_on == 0:
             Disp_on = 1
             Disp_start = time.monotonic()
             status()
@@ -777,10 +777,10 @@ while True:
             msg1 = "Play.." + str(track_n)[0:5]
             time.sleep(0.5)
             timer2 = time.monotonic()
-        elif  GPIO.input(VOLUP) == 0:
+        elif buttonVOLUP.is_pressed:
             time.sleep(0.5)
             timer1 = time.monotonic()
-            while GPIO.input(VOLUP) == 0 and time.monotonic() - timer1 < 2:
+            while buttonVOLUP.is_pressed and time.monotonic() - timer1 < 2:
                 pass
             if time.monotonic() - timer1 < 1:
                 msg2 = ""
@@ -839,7 +839,7 @@ while True:
             timer2 = time.monotonic()
 
         # check for VOLDN  key
-        if  GPIO.input(VOLDN) == 0 and Disp_on == 0:
+        if  buttonVOLDN.is_pressed and Disp_on == 0:
             Disp_on = 1
             Disp_start = time.monotonic()
             status()
@@ -850,11 +850,11 @@ while True:
             msg1 = "Play.." + str(track_n)[0:5] 
             time.sleep(0.5)
             timer2 = time.monotonic()
-        elif  GPIO.input(VOLDN) == 0:
+        elif buttonVOLDN.is_pressed:
             time.sleep(0.5)
             timer1 = time.monotonic()
             timer = time.monotonic()
-            while GPIO.input(VOLDN) == 0 and time.monotonic() - timer < 2:
+            while buttonVOLDN.is_pressed and time.monotonic() - timer < 2:
                 pass
             if time.monotonic() - timer < 1:
                 if gapless == 0:
@@ -892,7 +892,7 @@ while True:
                 timer2 = time.monotonic()
                 
         # check for PREVIOUS ALBUM key 
-        if  GPIO.input(PREV) == 0:
+        if  buttonPREV.is_pressed and len(tracks) > 1:
             Disp_on = 1
             while titles[1] == old_album and titles[0] == old_artist:
                 Track_No -=1
@@ -940,10 +940,9 @@ while True:
             time.sleep(0.05)
             timer3 = time.monotonic()
             album = 1
-            while GPIO.input(PREV) == 0:
+            while buttonPREV.is_pressed:
                 # PREVIOUS ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
-                  if GPIO.input(SLEEP) == 1:
                     while titles[0] == old_artist:
                         Track_No -=1
                         if Track_No < 0:
@@ -990,53 +989,7 @@ while True:
                         pass
                     display()
                     time.sleep(0.5)
-                  else:
-                    while titles[0][0:1] == old_artist[0:1]:
-                        Track_No -=1
-                        if Track_No < 0:
-                            Track_No = len(tracks) + Track_No
-                        if Track_No > len(tracks) - 1:
-                            Track_No = Track_No - len(tracks)
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    old_album  = titles[1]
-                    old_artist = titles[0]
-                    while titles[1][0:1] == old_album[0:1]:
-                        Track_No -=1
-                        if Track_No < 0:
-                            Track_No = len(tracks) + Track_No
-                        if Track_No > len(tracks) - 1:
-                            Track_No = Track_No - len(tracks)
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    Track_No +=1
-                    if Track_No > len(tracks) - 1:
-                        Track_No = Track_No - len(tracks)
-                    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    old_album  = titles[1]
-                    old_artist = titles[0]
-                    Tack_No = Track_No
-                    stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                    talbum = stitles[1]
-                    tartist = stitles[0]
-                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                        Tack_No +=1
-                    ctracks = Tack_No - Track_No - 1
-                    if album_mode == 0:
-                        track_n = str(Track_No + 1) + "     "
-                    else:
-                        track_n = "1/" + str(ctracks) + "       "
-                    msg1 = "Play:" + str(track_n)[0:5] 
-                    msg2 = titles[0][0:19]
-                    msg3 = titles[1][0:19]
-                    msg4 = titles[2][0:19]
-                    try:
-                        if int(titles[2][0:2]) > 0:
-                            msg4 = titles[2][3:22]
-                    except:
-                        pass
-                    display()
-                    time.sleep(0.5)
+
             defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
             with open(config_file, 'w') as f:
                 for item in defaults:
@@ -1045,7 +998,7 @@ while True:
             timer2 = time.monotonic()
             
         # check for SLEEP key
-        if  GPIO.input(SLEEP) == 0 and Disp_on == 0:
+        if  buttonSLEEP.is_pressed and Disp_on == 0:
             Disp_on = 1
             Disp_start = time.monotonic()
             status()
@@ -1056,9 +1009,9 @@ while True:
             msg1 = "Play.." + str(track_n)[0:5]
             time.sleep(0.5)
             timer2 = time.monotonic()
-        elif GPIO.input(SLEEP) == 0:
+        elif buttonSLEEP.is_pressed:
             timer1 = time.monotonic()
-            while GPIO.input(SLEEP) == 0 and time.monotonic() - timer1 < 2:
+            while buttonSLEEP.is_pressed and time.monotonic() - timer1 < 2:
                 pass
             if time.monotonic() - timer1 < 1:
                 if album_mode == 0:
@@ -1117,7 +1070,7 @@ while True:
                 msg4 = ""
                 display()
                 time.sleep(0.25)
-                while GPIO.input(SLEEP) == 0:
+                while buttonSLEEP.is_pressed:
                     sleep_timer +=900
                     if sleep_timer > 7200:
                          sleep_timer = 0
@@ -1196,7 +1149,7 @@ while True:
                 else:
                     msg2 = "STOPPING in " + str(t)
                     display()
-                if GPIO.input(SLEEP) == 0:
+                if buttonSLEEP.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -1257,7 +1210,7 @@ while True:
                 old_secs = secs
             
          # check for VOLDN  key
-        if  GPIO.input(VOLDN ) == 0 :
+        if  buttonVOLDN.is_pressed :
             Disp_on = 1
             Disp_start = time.monotonic()
             display()
@@ -1266,7 +1219,7 @@ while True:
             timer2 = time.monotonic()
 
         # check for VOLUP key
-        if  GPIO.input(VOLUP) == 0:
+        if  buttonVOLUP.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
             display()
@@ -1275,7 +1228,7 @@ while True:
             timer2 = time.monotonic()
                 
         # check PREV key
-        if GPIO.input(PREV) == 0:
+        if buttonPREV.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
             radio_stn -=2
@@ -1293,7 +1246,7 @@ while True:
             timer2 = time.monotonic()
             
         # check NEXT key
-        if GPIO.input(NEXT) == 0:
+        if buttonNEXT.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
             radio_stn +=2
@@ -1311,7 +1264,7 @@ while True:
             timer2 = time.monotonic()
             
         # check PLAY (STOP Radio) key
-        if GPIO.input(PLAY) == 0:
+        if buttonPLAY.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
             q.kill()
@@ -1329,7 +1282,7 @@ while True:
             
 
         # check for sleep_timer key
-        if GPIO.input(SLEEP) == 0:
+        if buttonSLEEP.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
             timer1 = time.monotonic()
@@ -1341,7 +1294,7 @@ while True:
             msg2 = "HOLD for 20 to SHUTDOWN "
             msg3 = ""
             display()
-            while GPIO.input(SLEEP) == 0:
+            while buttonSLEEP.is_pressed:
                 sleep_timer +=900
                 if sleep_timer > 7200:
                      sleep_timer = 0
@@ -1429,7 +1382,7 @@ while True:
                     msg3 = ""
                     msg4 = ""
                     display()
-                if GPIO.input(SLEEP) == 0:
+                if buttonSLEEP.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -1607,7 +1560,7 @@ while True:
                     xt = 0
                     
             # check for PLAY (STOP) key
-            if  GPIO.input(PLAY) == 0:
+            if  buttonPLAY.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 timer1 = time.monotonic()
@@ -1630,7 +1583,7 @@ while True:
                 timer2 = time.monotonic()
                 
             # check for PREVIOUS TRACK key 
-            elif  GPIO.input(PREV) == 0:
+            elif buttonPREV.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 Disp_on = 1
@@ -1643,7 +1596,7 @@ while True:
                 timer2 = time.monotonic()
                 
             # check for NEXT TRACK key 
-            elif  GPIO.input(NEXT) == 0:
+            elif  buttonNEXT.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 os.killpg(p.pid, SIGTERM)
@@ -1655,14 +1608,14 @@ while True:
                 timer2 = time.monotonic()
 
             # check for VOLDN  key
-            elif  GPIO.input(VOLDN) == 0:
+            elif buttonVOLDN.is_pressed:
               Disp_on = 1
               Disp_start = time.monotonic()
               display()
               time.sleep(0.5)
               timer1 = time.monotonic()
               timer  = time.monotonic()
-              while GPIO.input(VOLDN) == 0 and time.monotonic() - timer < 2:
+              while buttonVOLDN.is_pressed and time.monotonic() - timer < 2:
                 pass
               if time.monotonic() - timer < 1:
                 if gapless == 0:
@@ -1700,7 +1653,7 @@ while True:
                 timer2 = time.monotonic()
 
             # check for VOLUP key
-            elif  GPIO.input(VOLUP) == 0:
+            elif buttonVOLUP.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 display()
@@ -1710,7 +1663,7 @@ while True:
  
                            
             # check for SLEEP key
-            elif  GPIO.input(SLEEP) == 0 and Disp_on == 0:
+            elif  buttonSLEEP.is_pressed and Disp_on == 0:
                 Disp_start = time.monotonic()
                 Disp_on = 1
                 status()
@@ -1718,7 +1671,7 @@ while True:
                 display()
                 time.sleep(1)
                 timer2 = time.monotonic()
-            elif GPIO.input(SLEEP) == 0:
+            elif buttonSLEEP.is_pressed:
                 Disp_on = 1
                 timer1 = time.monotonic()
                 if (sleep_timer == 0 and album_mode == 0) or (album_mode ==1 and sleep_timer == stimer + 60):
@@ -1750,7 +1703,7 @@ while True:
                 msg4 = ""
                 display()
                 time.sleep(1)
-                while GPIO.input(SLEEP) == 0:
+                while buttonSLEEP.is_pressed:
                     if album_mode == 0:
                         sleep_timer +=900
                         if sleep_timer > 7200:
