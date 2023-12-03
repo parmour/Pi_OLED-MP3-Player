@@ -28,7 +28,7 @@ VOLUP  = 8  # (24) Adjust volume UP whilst playing, set RANDOM ON/OFF whilst sto
 
 SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
 
-Holding down PREV or NEXT and SLEEP will step through ARTISTS A-Z 
+Holding down NEXT and SLEEP will step through ARTISTS A-Z (whilst stopped)
 
 
 At boot it will look for mp3 tracks in '/home/USER/Music/artist name/album_name/tracks', 
@@ -57,6 +57,8 @@ and then
  reboot
 
  setup audio output as required.
+
+ to run at boot add /usr/bin/python3 /home/USERNAME/Pi_OLED_MP3_Player.py to /etc/xdg/lxsession/LXDE-pi/autostart
 
 
 
