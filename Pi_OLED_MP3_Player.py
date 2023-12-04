@@ -42,7 +42,7 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-version  = "1.2"
+version  = "1.3"
 
 # set default variables (saved in config_file and overridden at future startups)
 MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
@@ -56,7 +56,7 @@ Track_No     = 0
 
 # variables set once
 use_USB      = 1    # set to 0 if you ONLY use /home/pi/Music/... on SD card
-usb_timer    = 10   # seconds to find USB present
+usb_timer    = 6   # seconds to find USB present
 sleep_timer  = 0    # sleep_timer timer in minutes, use 15,30,45,60 etc...set to 0 to disable
 sleep_shutdn = 0    # set to 1 to shutdown Pi when sleep times out
 Disp_timer   = 60   # Display timeout in seconds, set to 0 to disable
@@ -72,10 +72,11 @@ Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
 
 PREV   = 20 # (38) PREVIOUS TRACK  (whilst playing) / PREV ALBUM (whilst stopped) / PREV ARTIST (HOLD for 5 secs whilst stopped) 
 PLAY   = 12 # (32) PLAY / STOP / HOLD for 5 seconds for RADIO 
-NEXT   = 7  # (26) NEXT TRACK (whilst playing) / NEXT ALBUM (whilst stopped) / NEXT ARTIST (HOLD for 5 secs whilst stopped) 
+NEXT   = 7  # (26) NEXT TRACK (whilst playing) / NEXT ALBUM (whilst stopped) / NEXT ARTIST (HOLD for 5 secs whilst stopped)
+SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
 VOLDN  = 16 # (36) Adjust volume DOWN whilst playing, set GAPLESS ON/OFF whilst stopped
 VOLUP  = 8  # (24) Adjust volume UP whilst playing, set RANDOM ON/OFF whilst stopped
-SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
+
 
 # check config file exists, if not then write default values
 config_file = "OLEDconfig.txt"
@@ -126,12 +127,12 @@ if os.path.exists ("radio_stns.txt"):
     with open("radio_stns.txt","r") as textobj:
         line = textobj.readline()
         while line:
-           if line.count(",") == 2:
-               a,b,c = line.split(",")
+           if line.count(",") == 1:
+               a,b = line.split(",")
                Radio_Stns.append(a)
                Radio_Stns.append(b.strip())
            line = textobj.readline()
-
+    print(Radio_Stns)
 
 # setup GPIO
 buttonPREV  = Button(PREV)
@@ -305,6 +306,19 @@ if line != str(total_size):
         f.write(str(total_size))
     reloading = 1
 
+# load MP3 tracks
+tracks  = []
+if not os.path.exists('tracks.txt') and stop == 0:
+    reload()
+else:
+    with open("tracks.txt", "r") as file:
+        line = file.readline()
+        while line:
+             tracks.append(line.strip())
+             line = file.readline()
+msg1 = "Tracks: " + str(len(tracks))
+display()
+
 # check if USB mounted and find USB storage
 if use_USB == 1:
     start = time.monotonic()
@@ -339,8 +353,10 @@ if use_USB == 1:
                 f.write("%s\n" % item)
         msg2 = "No USB Found !!"
         display()
+        sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
         time.sleep(2)
-        reloading = 1
+        if len(sd_tracks) != len(tracks):
+            reloading = 1
         msg2 = ""
         display()
 
@@ -359,18 +375,6 @@ if len(alsaaudio.mixers()) > 0:
     if mixername == "DSP Program":
         os.system("amixer set 'Digital' " + str(volume + 107))
         
-# load MP3 tracks
-tracks  = []
-if not os.path.exists('tracks.txt') and stop == 0:
-    reload()
-else:
-    with open("tracks.txt", "r") as file:
-        line = file.readline()
-        while line:
-             tracks.append(line.strip())
-             line = file.readline()
-msg1 = "Tracks: " + str(len(tracks))
-display()
 
 # disable Radio Play if MP3 Play set
 if MP3_Play == 1:
@@ -660,10 +664,8 @@ while True:
         if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
-            while titles[1] == old_album and titles[0] == old_artist:
+            while titles[1] == old_album and titles[0] == old_artist and Track_No < len(tracks) - 1:
                 Track_No +=1
-                if Track_No > len(tracks) - 1:
-                    Track_No = Track_No - len(tracks)
                 titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
             old_album  = titles[1]
             old_artist = titles[0]
@@ -697,10 +699,8 @@ while True:
                 # NEXT ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
                     if buttonSLEEP.is_pressed == 0:
-                        while titles[0] == old_artist:
+                        while titles[0] == old_artist and Track_No < len(tracks) - 1:
                             Track_No +=1
-                            if Track_No > len(tracks) - 1:
-                                Track_No = Track_No - len(tracks)
                             titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
                         old_artist = titles[0]
                         Tack_No = Track_No
@@ -728,10 +728,8 @@ while True:
                         display()
                         time.sleep(0.5)
                     else:
-                        while titles[0][0:1] == old_artist[0:1]:
+                        while titles[0][0:1] == old_artist[0:1] and Track_No < len(tracks) - 1 :
                             Track_No +=1
-                            if Track_No > len(tracks) - 1:
-                                Track_No = Track_No - len(tracks)
                             titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
                         old_artist = titles[0]
                         Tack_No = Track_No
@@ -894,17 +892,13 @@ while True:
         # check for PREVIOUS ALBUM key 
         if  buttonPREV.is_pressed and len(tracks) > 1:
             Disp_on = 1
-            while titles[1] == old_album and titles[0] == old_artist:
+            while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
                 Track_No -=1
-                if Track_No < 0:
-                    Track_No = len(tracks) + Track_No
                 titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
             old_album = titles[1]
             old_artist = titles[0]
-            while titles[1] == old_album and titles[0] == old_artist:
+            while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
                 Track_No -=1
-                if Track_No < 0:
-                    Track_No = len(tracks) + Track_No
                 titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
             Track_No +=1
             if Track_No > len(tracks) - 1:
@@ -943,21 +937,21 @@ while True:
             while buttonPREV.is_pressed:
                 # PREVIOUS ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
-                    while titles[0] == old_artist:
+                    while titles[0] == old_artist and Track_No > -1:
                         Track_No -=1
-                        if Track_No < 0:
-                            Track_No = len(tracks) + Track_No
-                        if Track_No > len(tracks) - 1:
-                            Track_No = Track_No - len(tracks)
+                        #if Track_No < 0:
+                        #    Track_No = len(tracks) + Track_No
+                        #if Track_No > len(tracks) - 1:
+                        #    Track_No = Track_No - len(tracks)
                         titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
                     old_album  = titles[1]
                     old_artist = titles[0]
-                    while titles[1] == old_album and titles[0] == old_artist:
+                    while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
                         Track_No -=1
-                        if Track_No < 0:
-                            Track_No = len(tracks) + Track_No
-                        if Track_No > len(tracks) - 1:
-                            Track_No = Track_No - len(tracks)
+                        #if Track_No < 0:
+                        #    Track_No = len(tracks) + Track_No
+                        #if Track_No > len(tracks) - 1:
+                        #    Track_No = Track_No - len(tracks)
                         titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
                     Track_No +=1
                     if Track_No > len(tracks) - 1:
@@ -969,7 +963,7 @@ while True:
                     stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
                     talbum = stitles[1]
                     tartist = stitles[0]
-                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
+                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks) and Track_No > -1:
                         stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
                         strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
                         Tack_No +=1
@@ -1155,14 +1149,15 @@ while True:
                     abort_sd = 1
                 t -=1
                 time.sleep(1)
+            if abort_sd == 0:
                 if sleep_shutdn == 1:
                     msg1 = "SHUTTING DOWN..."
                     display()
                 else:
                     msg1 = "STOPPING........"
-                    display()
+                display()
                 msg2 = ""
-                time.sleep(3)
+                time.sleep(1)
                 msg1 = ""
                 display()
                 q.kill()
