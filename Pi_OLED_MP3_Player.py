@@ -42,7 +42,7 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-version  = "1.3"
+version  = "1.04"
 
 # set default variables (saved in config_file and overridden at future startups)
 MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
@@ -122,7 +122,7 @@ draw.rectangle((0,0,width,height), outline=0, fill=0)
 top = -2
 font = ImageFont.load_default()
 
-# read Radio_Stns.txt - format: Station Name,Station URL
+# read radio_stns.txt - format: Station Name,Station URL
 if os.path.exists ("radio_stns.txt"): 
     with open("radio_stns.txt","r") as textobj:
         line = textobj.readline()
@@ -132,7 +132,6 @@ if os.path.exists ("radio_stns.txt"):
                Radio_Stns.append(a)
                Radio_Stns.append(b.strip())
            line = textobj.readline()
-    print(Radio_Stns)
 
 # setup GPIO
 buttonPREV  = Button(PREV)
@@ -165,6 +164,8 @@ msg1        = "MP3 Player: v" + version
 msg2        = ""
 msg3        = ""
 msg4        = ""
+abort_sd    = 1
+usb_found   = 0
 
 # find username
 h_user  = []
@@ -524,7 +525,7 @@ while True:
                 xt = 0
 
         # display clock (if enabled and synced)
-        if show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0:
+        if show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1:
             now = datetime.datetime.now()
             clock = now.strftime("%H:%M:%S")
             secs = now.strftime("%S")
@@ -1163,9 +1164,10 @@ while True:
                 q.kill()
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
-                radio = 0
                 sleep_timer = 0
                 time.sleep(1)
+                stopped = 1
+                radio = 0
             Disp_start = time.monotonic()
             
         # display sleep_timer time left and clock (if enabled and synced)
@@ -1257,6 +1259,7 @@ while True:
                 for item in defaults:
                     f.write("%s\n" % item)
             timer2 = time.monotonic()
+            time.sleep(0.5)
             
         # check PLAY (STOP Radio) key
         if buttonPLAY.is_pressed:
@@ -1281,10 +1284,6 @@ while True:
             Disp_on = 1
             Disp_start = time.monotonic()
             timer1 = time.monotonic()
-            sleep_timer +=900
-            if sleep_timer > 7200:
-                sleep_timer = 0
-            sleep_timer_start = time.monotonic()
             msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
             msg2 = "HOLD for 20 to SHUTDOWN "
             msg3 = ""
@@ -1403,8 +1402,8 @@ while True:
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
                 sleep_timer = 0
-                MP3_Play = 0
                 stopped = 1
+                MP3_Play = 0
             else:
                 status()
                 msg1 = "Play.." + str(track_n)[0:5] + txt
