@@ -49,19 +49,20 @@ MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
 radio        = 0    # set to 1 to start playing Radio at boot, else 0
 radio_stn    = 0    # selected radio station at startup 
 shuffled     = 0    # 0 = Unshuffled, 1 = Shuffled
-album_mode   = 0    # set to 1 for Album Mode, will play an album then stop
+album_mode   = 1    # set to 1 for Album Mode, will play an album then stop
 gapless      = 0    # set to 1 for gapless play
 volume       = 50   # range 0 - 100
 Track_No     = 0
 
 # variables set once
-use_USB      = 1    # set to 0 if you ONLY use /home/pi/Music/... on SD card
+use_USB      = 0    # set to 0 if you ONLY use /home/pi/Music/... on SD card
 usb_timer    = 6   # seconds to find USB present
 sleep_timer  = 0    # sleep_timer timer in minutes, use 15,30,45,60 etc...set to 0 to disable
 sleep_shutdn = 0    # set to 1 to shutdown Pi when sleep times out
 Disp_timer   = 60   # Display timeout in seconds, set to 0 to disable
-show_clock   = 1    # set to 1 to show clock, only use if on web or using RTC
+show_clock   = 0    # set to 1 to show clock, only use if on web or using RTC
 gaptime      = 2    # set pre-start time for gapless, in seconds
+myUsername   = "philip"   # 
 
 Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
               "Radio Paradise Main","http://stream.radioparadise.com/mp3-320",
@@ -169,7 +170,13 @@ usb_found   = 0
 
 # find username
 h_user  = []
-h_user.append(os.getlogin())
+h_user.append(myUsername)   # os.getlogin() not always working when script run automatically
+
+def getTrack(trackNum):
+    global tracks
+    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[trackNum].split("/")
+    trackData = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
+    return trackData
 
 def display():
     global image,top,msg1,msg2,msg3,msg4,width,height,font
@@ -223,6 +230,130 @@ def reload():
         display()
         stop = 1
     time.sleep(1)
+
+
+def loadTrackDictionaries():
+    global tracks, albumDictionary, artistDictionary, albumTuple, artistTuple
+    albumTuple = ()    #   list of all albums in order    Because album names might not be unique, format is "AlbumName - Artist"
+    artistTuple = ()   #   list of all artists in order
+    albumDictionary = {}   #  key is album ("AlbumName - Artist"), value is (first track number, last track number)
+    artistDictionary = {}   #  key is artist, value is (first track number, last track number)
+    currentArtist = ""
+    currentArtistFirst = 0
+    currentArtistLast = 0
+    currentAlbum = ""
+    currentAlbumFirst = 0
+    currentAlbumLast = 0
+    for trackNum in range(0,len(tracks)):
+        ( artist, album, song, path1, path2, path3 ) = tracks[trackNum].split("/")
+        uniqAlbum = album + " - " + artist   # Because album names might not be unique, format is "AlbumName - Artist"
+        if artist not in artistTuple:
+            artistTuple += ( artist, )
+        if uniqAlbum not in albumTuple:
+            albumTuple += ( uniqAlbum, )
+        if not currentArtist:
+            currentArtist = artist
+        elif artist != currentArtist:
+            currentArtistLast = trackNum - 1
+            if currentArtist not in artistDictionary.keys():
+                artistDictionary[currentArtist] = ( currentArtistFirst, currentArtistLast)
+            currentArtist = artist
+            currentArtistFirst = trackNum
+            currentArtistLast = trackNum
+        if not currentAlbum:
+            currentAlbum = uniqAlbum
+        elif uniqAlbum != currentAlbum:
+            currentAlbumLast = trackNum - 1
+            if currentAlbum not in albumDictionary.keys():
+                albumDictionary[currentAlbum] = ( currentAlbumFirst, currentAlbumLast)
+            currentAlbum = uniqAlbum
+            currentAlbumFirst = trackNum
+            currentAlbumLast = trackNum
+    currentArtistLast = trackNum
+    if currentArtist not in artistDictionary.keys():  # process the last artist
+        artistDictionary[currentArtist] = ( currentArtistFirst, currentArtistLast )            
+    currentAlbumLast = trackNum
+    if currentAlbum not in albumDictionary.keys():  # process the last album
+        albumDictionary[currentAlbum] = ( currentAlbumFirst, currentAlbumLast)   
+
+def getArtistAlbumSongNames(trackNum):
+    global tracks
+    ( artist, album, song, path1, path2, path3 ) = tracks[trackNum].split("/")
+    return ( artist, album, song )
+
+def getAlbumStartFinish(trackNum):
+    ( artist, album, song ) = getArtistAlbumSongNames(trackNum)
+    uniqAlbum = album + " - " + artist
+    ( currentAlbumFirst, currentAlbumLast) = albumDictionary[uniqAlbum]
+    return ( currentAlbumFirst, currentAlbumLast)
+
+def getArtistStartFinish(trackNum):
+    ( artist, album, song ) = getArtistAlbumSongNames(trackNum)
+    ( currentArtistFirst, currentArtistLast) = artistDictionary[artist]
+    return ( currentArtistFirst, currentArtistLast)
+
+def getRemainingAlbumTracks(trackNum):
+    ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
+    numRemainingTracks = currentAlbumLast - trackNum
+    return numRemainingTracks
+
+def getRemainingAlbumTime(trackNum):
+    ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
+    timeRemaining = 0
+    for trackCounter in range(trackNum,currentAlbumLast):
+        trackDetails = getTrack(trackCounter)
+        audio = MP3(trackDetails)
+        timeRemaining += audio.info.length
+    return timeRemaining
+
+def goToNextAlbum(trackNum):
+    global tracks
+    ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
+    nextAlbumStart = currentAlbumLast + 1
+    if nextAlbumStart > len(tracks):
+        nextAlbumStart = 0
+    return nextAlbumStart
+
+def goToNextArtist(trackNum):
+    global tracks
+    ( currentArtistFirst, currentArtistLast) = getArtistStartFinish(trackNum)
+    nextArtistStart = currentArtistLast + 1
+    if nextArtistStart > len(tracks):
+        nextArtistStart = 0
+    return nextArtistStart
+
+def goToPrevAlbum(trackNum):
+    global tracks
+    ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
+    prevAlbumEnd = currentAlbumFirst - 1
+    if prevAlbumEnd > 0:
+        ( prevAlbumFirst, prevAlbumLast) = getAlbumStartFinish(prevAlbumEnd)
+    else:
+        prevAlbumFirst = 0
+    return prevAlbumFirst
+
+def goToPrevArtist(trackNum):
+    global tracks
+    ( currentArtistFirst, currentArtistLast) = getArtistStartFinish(trackNum)
+    prevArtistEnd = currentArtistFirst - 1
+    if prevArtistEnd > 0:
+        ( prevArtistFirst, prevArtistLast) = getArtistStartFinish(prevArtistEnd)
+    else:
+        prevArtistFirst = 0
+    return prevArtistFirst
+
+def getSongDetails(trackNum):
+    ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
+    out1 = artist[0:19]
+    out2 = album[0:19]
+    out3 = song[0:19]
+    try:
+        if int(song[0:2]) > 0:
+            out3 = song[3:22]
+    except:
+        pass
+    return ( out1, out2, out3)
+
 
 def Set_Volume():
     global mixername,m,msg1,msg2,msg3,msg4,MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless
@@ -317,6 +448,8 @@ else:
         while line:
              tracks.append(line.strip())
              line = file.readline()
+
+
 msg1 = "Tracks: " + str(len(tracks))
 display()
 
@@ -364,6 +497,8 @@ if use_USB == 1:
 if reloading == 1 and stop == 0:
     reload()
 
+
+
 # check for audio mixers
 if len(alsaaudio.mixers()) > 0:
     for mixername in alsaaudio.mixers():
@@ -393,31 +528,21 @@ if radio == 1:
 
 # try reloading tracks if one selected not found
 if len(tracks) > 0:
-    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-    track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
+    track = getTrack(Track_No)
     if not os.path.exists (track) and usb_found > 0 and stop == 0:
         reload()
+
+# populate albumDictionary, artistDictionary, albumTuple, artistTuple
+loadTrackDictionaries()  
 
 if album_mode == 1 and len(tracks) > 0:
     # determine album length and number of tracks
     cplayed = 0
     shuffled = 0
     if album_mode == 1:
-        Tack_No = Track_No
-        stimer  = 0
-        stitles = [0,0,0,0,0,0,0]
-        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-        talbum  = stitles[1]
-        tartist = stitles[0]
-        while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-            strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-            audio = MP3(strack)
-            stimer += audio.info.length
-            Tack_No +=1
-        audio = MP3(strack)
-        stimer -= audio.info.length
-        ctracks = Tack_No - Track_No - 1
+        ctracks = getRemainingAlbumTracks(Track_No)
+        stimer = getRemainingAlbumTime(Track_No) 
+
 
 if album_mode == 0:
     track_n = str(Track_No + 1) + "     "
@@ -438,7 +563,7 @@ elif shuffled == 0 and gapless != 0:
     gap = gaptime
 
 if len(tracks) > 0:
-    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
+    ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
 
 sleep_timer_start = time.monotonic()
 Disp_start        = time.monotonic()
@@ -490,14 +615,7 @@ while True:
             
         # display Artist / Album / Track names
         if time.monotonic() - timer2 > 3 and Disp_on == 1 and len(tracks) > 0:
-            msg2 = titles[0][0:19]
-            msg3 = titles[1][0:19]
-            msg4 = titles[2][0:19]
-            try:
-                if int(titles[2][0:2]) > 0:
-                    msg4 = titles[2][3:22]
-            except:
-                pass
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
             timer2 = time.monotonic()
             if xt < 2:
                 if album_mode == 0:
@@ -620,21 +738,8 @@ while True:
                 # determine album length and number of tracks
                 cplayed = 0
                 if album_mode == 1:
-                    Tack_No = Track_No
-                    stimer  = 0
-                    stitles = [0,0,0,0,0,0,0]
-                    stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                    talbum = stitles[1]
-                    tartist = stitles[0]
-                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                        audio = MP3(strack)
-                        stimer += audio.info.length
-                        Tack_No +=1
-                    audio = MP3(strack)
-                    stimer -= audio.info.length
-                    ctracks = Tack_No - Track_No - 1
+                    ctracks = getRemainingAlbumTracks(Track_No)
+                    stimer = getRemainingAlbumTime(Track_No) 
                 atimer = time.monotonic()
                 MP3_Play = 1
                 radio    = 0
@@ -665,34 +770,14 @@ while True:
         if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
-            while titles[1] == old_album and titles[0] == old_artist and Track_No < len(tracks) - 1:
-                Track_No +=1
-                titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-            old_album  = titles[1]
-            old_artist = titles[0]
-            Tack_No = Track_No
-            stitles = [0,0,0,0,0,0,0]
-            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-            talbum = stitles[1]
-            tartist = stitles[0]
-            while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                Tack_No +=1
-            ctracks = Tack_No - Track_No - 1
+            Track_No = goToNextAlbum(Track_No)
+            ctracks = getRemainingAlbumTracks(Track_No)
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(ctracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
-            msg2 = titles[0][0:19]
-            msg3 = titles[1][0:19]
-            msg4 = titles[2][0:19]
-            try:
-                if int(titles[2][0:2]) > 0:
-                    msg4 = titles[2][3:22]
-            except:
-                pass
             display()
             timer3 = time.monotonic()
             album = 1
@@ -700,63 +785,20 @@ while True:
                 # NEXT ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
                     if buttonSLEEP.is_pressed == 0:
-                        while titles[0] == old_artist and Track_No < len(tracks) - 1:
-                            Track_No +=1
-                            titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                        old_artist = titles[0]
-                        Tack_No = Track_No
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        talbum = stitles[1]
-                        tartist = stitles[0]
-                        while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                            strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                            Tack_No +=1
-                        ctracks = Tack_No - Track_No - 1
-                        if album_mode == 0:
-                            track_n = str(Track_No + 1) + "     "
-                        else:
-                            track_n = "1/" + str(ctracks) + "       "
-                        msg1 = "Play:" + str(track_n)[0:5] 
-                        msg2 = titles[0][0:19]
-                        msg3 = titles[1][0:19]
-                        msg4 = titles[2][0:19]
-                        try:
-                            if int(titles[2][0:2]) > 0:
-                                msg4 = titles[2][3:22]
-                        except:
-                            pass
-                        display()
-                        time.sleep(0.5)
+                        Track_No = goToNextArtist(Track_No)
                     else:
-                        while titles[0][0:1] == old_artist[0:1] and Track_No < len(tracks) - 1 :
-                            Track_No +=1
-                            titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                        old_artist = titles[0]
-                        Tack_No = Track_No
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        talbum = stitles[1]
-                        tartist = stitles[0]
-                        while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                            strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                            Tack_No +=1
-                        ctracks = Tack_No - Track_No - 1
-                        if album_mode == 0:
-                            track_n = str(Track_No + 1) + "     "
-                        else:
-                            track_n = "1/" + str(ctracks) + "       "
-                        msg1 = "Play:" + str(track_n)[0:5] 
-                        msg2 = titles[0][0:19]
-                        msg3 = titles[1][0:19]
-                        msg4 = titles[2][0:19]
-                        try:
-                            if int(titles[2][0:2]) > 0:
-                                msg4 = titles[2][3:22]
-                        except:
-                            pass
-                        display()
-                        time.sleep(0.5)
+                        for doAgain in range(0,5):   # skip forward 5 artists at a time
+                            Track_No = goToNextArtist(Track_No)
+                    ctracks = getRemainingAlbumTracks(Track_No)
+                    ( msg2, msg3, msg4) = getSongDetails(Track_No)
+                    if album_mode == 0:
+                        track_n = str(Track_No + 1) + "     "
+                    else:
+                        track_n = "1/" + str(ctracks) + "       "
+                    msg1 = "Play:" + str(track_n)[0:5] 
+                    display()
+                    time.sleep(0.5)
+
             defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
             with open(config_file, 'w') as f:
                 for item in defaults:
@@ -787,8 +829,8 @@ while True:
                 msg4 = ""
                 if shuffled == 0:
                     shuffled = 1
-                    shuffle(tracks)
-                    Track_No = 0
+                    #shuffle(tracks)
+                    #Track_No = 0
                     album_mode = 0
                     track_n  = str(Track_No + 1) + "     "
                     msg2 = "Random Mode ON "
@@ -796,26 +838,12 @@ while True:
                 else:
                     shuffled = 0
                     msg2 = "Random Mode OFF "
-                    itles[0],itles[1],itles[2],itles[3],itles[4],itles[5],itles[6] = tracks[Track_No].split("/")
-                    tracks.sort()
-                    Track_No = 0
-                    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    while titles[0] != itles[0] or titles[1] != itles[1]:
-                        Track_No +=1
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    track_n  = str(Track_No) + "     "
-                    if album_mode == 1:
-                        Tack_No = Track_No
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        talbum = stitles[1]
-                        tartist = stitles[0]
-                        while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                            strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                            Tack_No +=1
-                        ctracks = Tack_No - Track_No - 1
-                        album_mode = 1
-                        track_n = "1/" + str(ctracks) + "       "
+                    ####
+                if album_mode == 1:
+                    ctracks = getRemainingAlbumTracks(Track_No)
+                    track_n = "1/" + str(ctracks) + "       "
+                else:
+                    track_n  = str(Track_No) + "     
                 display()
                 defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
                 with open(config_file, 'w') as f:
@@ -893,44 +921,15 @@ while True:
         # check for PREVIOUS ALBUM key 
         if  buttonPREV.is_pressed and len(tracks) > 1:
             Disp_on = 1
-            while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
-                Track_No -=1
-                titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-            old_album = titles[1]
-            old_artist = titles[0]
-            while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
-                Track_No -=1
-                titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-            Track_No +=1
-            if Track_No > len(tracks) - 1:
-                Track_No = Track_No - len(tracks)
-            titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-            old_album  = titles[1]
-            old_artist = titles[0]
-            Tack_No = Track_No
-            stitles = [0,0,0,0,0,0,0]
-            stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-            talbum = stitles[1]
-            tartist = stitles[0]
-            while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                Tack_No +=1
-            ctracks = Tack_No - Track_No - 1
+            Track_No = goToPrevAlbum(Track_No)
+            ctracks = getRemainingAlbumTracks(Track_No)
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(ctracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
             time.sleep(0.05)
-            msg2 = titles[0][0:19]
-            msg3 = titles[1][0:19]
-            msg4 = titles[2][0:19]
-            try:
-                if int(titles[2][0:2]) > 0:
-                    msg4 = titles[2][3:22]
-            except:
-                pass
             display()
             time.sleep(0.05)
             timer3 = time.monotonic()
@@ -938,50 +937,14 @@ while True:
             while buttonPREV.is_pressed:
                 # PREVIOUS ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
-                    while titles[0] == old_artist and Track_No > -1:
-                        Track_No -=1
-                        #if Track_No < 0:
-                        #    Track_No = len(tracks) + Track_No
-                        #if Track_No > len(tracks) - 1:
-                        #    Track_No = Track_No - len(tracks)
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    old_album  = titles[1]
-                    old_artist = titles[0]
-                    while titles[1] == old_album and titles[0] == old_artist and Track_No > -1:
-                        Track_No -=1
-                        #if Track_No < 0:
-                        #    Track_No = len(tracks) + Track_No
-                        #if Track_No > len(tracks) - 1:
-                        #    Track_No = Track_No - len(tracks)
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    Track_No +=1
-                    if Track_No > len(tracks) - 1:
-                        Track_No = Track_No - len(tracks)
-                    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    old_album  = titles[1]
-                    old_artist = titles[0]
-                    Tack_No = Track_No
-                    stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                    talbum = stitles[1]
-                    tartist = stitles[0]
-                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks) and Track_No > -1:
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                        Tack_No +=1
-                    ctracks = Tack_No - Track_No - 1
+                    Track_No = goToPrevArtist(Track_No)
+                    ctracks = getRemainingAlbumTracks(Track_No)
+                    ( msg2, msg3, msg4) = getSongDetails(Track_No)
                     if album_mode == 0:
                         track_n = str(Track_No + 1) + "     "
                     else:
                         track_n = "1/" + str(ctracks) + "       "
                     msg1 = "Play:" + str(track_n)[0:5] 
-                    msg2 = titles[0][0:19]
-                    msg3 = titles[1][0:19]
-                    msg4 = titles[2][0:19]
-                    try:
-                        if int(titles[2][0:2]) > 0:
-                            msg4 = titles[2][3:22]
-                    except:
-                        pass
                     display()
                     time.sleep(0.5)
 
@@ -1012,34 +975,12 @@ while True:
                 if album_mode == 0:
                     album_mode = 1
                     shuffled    = 0
-                    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    new_artist = titles[0]
-                    new_album  = titles[1]
-                    tracks.sort()
-                    Track_No = 0
-                    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                    while new_artist != titles[0] or new_album != titles[1]:
-                        titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-                        Track_No +=1
-                    Track_No -=1
                     msg2 = "Album Mode ON "
                     msg3 = ""
                     msg4 = ""
-                    Tack_No = Track_No 
-                    stimer  = 0
-                    stitles = [0,0,0,0,0,0,0]
-                    stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                    talbum = stitles[1]
-                    tartist = stitles[0]
-                    while stitles[1] == talbum and stitles[0] == tartist and Tack_No < len(tracks):
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                        audio = MP3(strack)
-                        stimer += audio.info.length
-                        Tack_No +=1
-                    audio = MP3(strack)
-                    stimer -= audio.info.length
-                    ctracks = Tack_No - Track_No - 1
+                    Track_No = goToNextAlbum(Track_No)
+                    ctracks = getRemainingAlbumTracks(Track_No)
+                    stimer = getRemainingAlbumTime(Track_No) 
                     track_n = str(cplayed) + "/" + str(ctracks) + "       "
                 else:
                     album_mode = 0
@@ -1348,14 +1289,7 @@ while True:
         if cplayed > ctracks and album_mode == 1:
             status()
             msg1 = "Play.."
-            msg2 = titles[0][0:19]
-            msg3 = titles[1][0:19]
-            msg4 = titles[2][0:19]
-            try:
-                if int(titles[2][0:2]) > 0:
-                    msg4 = titles[2][3:22]
-            except:
-                pass
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
             display()
             MP3_Play = 0
             
@@ -1421,32 +1355,23 @@ while True:
             
         # try reloading tracks if one selected not found
         if len(tracks) > 0:
-            titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
-            track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
+            track = getTrack(Track_No)
             if not os.path.exists (track) and stop == 0 :
                 reload()
             
         # play selected track
         if MP3_Play == 1 and len(tracks) > 0:
-          titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[Track_No].split("/")
+          track = getTrack(Track_No)
+          ( msg2, msg3, msg4) = getSongDetails(Track_No)
           if album_mode == 0:
               track_n = str(Track_No + 1) + "     "
           else:
               track_n = str(cplayed) + "/" + str(ctracks)
-          track = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
           if album_mode == 0:
               msg1 = "Track:" + str(track_n)[0:5] + "   0%"
           else:
               msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
           rpistr = "mplayer " + " -quiet " +  '"' + track + '"'
-          msg2 = titles[0][0:19]
-          msg3 = titles[1][0:19]
-          msg4 = titles[2][0:19]
-          try:
-              if int(titles[2][0:2]) > 0:
-                  msg4 = titles[2][3:22]
-          except:
-              pass
           if Disp_on == 1:
               display()
           audio = MP3(track)
@@ -1510,14 +1435,7 @@ while True:
            
             # display titles, status etc
             if time.monotonic() - timer2 > 2 and Disp_on == 1:
-                msg2 = titles[0][0:19]
-                msg3 = titles[1][0:19]
-                msg4 = titles[2][0:19]
-                try:
-                    if int(titles[2][0:2]) > 0:
-                        msg4 = titles[2][3:22]
-                except:
-                    pass
+                ( msg2, msg3, msg4) = getSongDetails(Track_No)
                 timer2    = time.monotonic()
                 played_pc =  "     " + str(played_pc)
                 if album_mode == 0:
@@ -1672,19 +1590,7 @@ while True:
                     sleep_timer = 900
                 elif sleep_timer == 0 and shuffled == 0 and album_mode == 1:
                     # determine album length to set sleep time
-                    Tack_No = Track_No
-                    stimer  = 0
-                    stitles = [0,0,0,0,0,0,0]
-                    stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                    talbum = stitles[1]
-                    while stitles[1] == talbum:
-                        stitles[0],stitles[1],stitles[2],stitles[3],stitles[4],stitles[5],stitles[6] = tracks[Tack_No].split("/")
-                        strack = stitles[3] + "/" + stitles[4] + "/" + stitles[5] + "/" + stitles[6] + "/" + stitles[0] + "/" + stitles[1] + "/" + stitles[2]
-                        audio = MP3(strack)
-                        stimer += audio.info.length
-                        Tack_No +=1
-                    audio = MP3(strack)
-                    stimer -= audio.info.length
+                    stimer = getRemainingAlbumTime(Track_No) 
                     sleep_timer = stimer + 60
                 else:
                     sleep_timer = (time_left * 60) + 960
