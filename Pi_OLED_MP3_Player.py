@@ -245,7 +245,7 @@ def loadTrackDictionaries():
     currentAlbumFirst = 0
     currentAlbumLast = 0
     for trackNum in range(0,len(tracks)):
-        ( artist, album, song, path1, path2, path3 ) = tracks[trackNum].split("/")
+        ( artist, album, song, path1, path2, path3, path4 ) = tracks[trackNum].split("/")
         uniqAlbum = album + " - " + artist   # Because album names might not be unique, format is "AlbumName - Artist"
         if artist not in artistTuple:
             artistTuple += ( artist, )
@@ -278,7 +278,7 @@ def loadTrackDictionaries():
 
 def getArtistAlbumSongNames(trackNum):
     global tracks
-    ( artist, album, song, path1, path2, path3 ) = tracks[trackNum].split("/")
+    ( artist, album, song, path1, path2, path3, path4 ) = tracks[trackNum].split("/")
     return ( artist, album, song )
 
 def getAlbumStartFinish(trackNum):
@@ -843,7 +843,7 @@ while True:
                     ctracks = getRemainingAlbumTracks(Track_No)
                     track_n = "1/" + str(ctracks) + "       "
                 else:
-                    track_n  = str(Track_No) + "     
+                    track_n  = str(Track_No) + "       "    
                 display()
                 defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
                 with open(config_file, 'w') as f:
