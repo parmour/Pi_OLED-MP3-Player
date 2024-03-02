@@ -154,8 +154,8 @@ old_secs2   = "00"
 Disp_on     = 1
 album       = 0
 stimer      = 0
-ctracks     = 0
-cplayed     = 0
+remainTracks     = 0
+currentTrack     = 0
 stopped     = 0
 atimer      = time.monotonic()
 played_pc   = 0
@@ -292,10 +292,11 @@ def getArtistStartFinish(trackNum):
     ( currentArtistFirst, currentArtistLast) = artistDictionary[artist]
     return ( currentArtistFirst, currentArtistLast)
 
-def getRemainingAlbumTracks(trackNum):
+def getAlbumTracksInfo(trackNum):
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
     numRemainingTracks = currentAlbumLast - trackNum
-    return numRemainingTracks
+    currentTrack = trackNum - currentAlbumFirst + 1
+    return ( numRemainingTracks, currentTrack )
 
 def getRemainingAlbumTime(trackNum):
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
@@ -537,17 +538,17 @@ loadTrackDictionaries()
 
 if album_mode == 1 and len(tracks) > 0:
     # determine album length and number of tracks
-    cplayed = 0
+
     shuffled = 0
     if album_mode == 1:
-        ctracks = getRemainingAlbumTracks(Track_No)
+        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
         stimer = getRemainingAlbumTime(Track_No) 
 
 
 if album_mode == 0:
     track_n = str(Track_No + 1) + "     "
 else:
-    track_n = "1/" + str(ctracks) + "       "
+    track_n = "1/" + str(remainTracks) + "       "
 
 status()
     
@@ -621,7 +622,7 @@ while True:
                 if album_mode == 0:
                     track_n = str(Track_No + 1) + "     "
                 else:
-                    track_n = "1/" + str(ctracks) + "       "
+                    track_n = "1/" + str(remainTracks) + "       "
                 msg1 = "Play: " + str(track_n)[0:5]  
             elif xt == 2:
                 status()
@@ -714,7 +715,7 @@ while True:
                 if album_mode == 0:
                     track_n = str(Track_No + 1) + "     "
                 else:
-                    track_n = "1/" + str(ctracks) + "       "
+                    track_n = "1/" + str(remainTracks) + "       "
                 msg1 = "Play.." + str(track_n)[0:5]
                 display()
             Disp_start = time.monotonic()
@@ -736,9 +737,8 @@ while True:
                 pass
             if time.monotonic() - timer1 < 5 and len(tracks) > 0:
                 # determine album length and number of tracks
-                cplayed = 0
                 if album_mode == 1:
-                    ctracks = getRemainingAlbumTracks(Track_No)
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                     stimer = getRemainingAlbumTime(Track_No) 
                 atimer = time.monotonic()
                 MP3_Play = 1
@@ -771,12 +771,12 @@ while True:
             Disp_on = 1
             time.sleep(0.2)
             Track_No = goToNextAlbum(Track_No)
-            ctracks = getRemainingAlbumTracks(Track_No)
+            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
             display()
             timer3 = time.monotonic()
@@ -789,12 +789,12 @@ while True:
                     else:
                         for doAgain in range(0,5):   # skip forward 5 artists at a time
                             Track_No = goToNextArtist(Track_No)
-                    ctracks = getRemainingAlbumTracks(Track_No)
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                     ( msg2, msg3, msg4) = getSongDetails(Track_No)
                     if album_mode == 0:
                         track_n = str(Track_No + 1) + "     "
                     else:
-                        track_n = "1/" + str(ctracks) + "       "
+                        track_n = "1/" + str(remainTracks) + "       "
                     msg1 = "Play:" + str(track_n)[0:5] 
                     display()
                     time.sleep(0.5)
@@ -814,7 +814,7 @@ while True:
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play.." + str(track_n)[0:5]
             time.sleep(0.5)
             timer2 = time.monotonic()
@@ -840,8 +840,8 @@ while True:
                     msg2 = "Random Mode OFF "
                     ####
                 if album_mode == 1:
-                    ctracks = getRemainingAlbumTracks(Track_No)
-                    track_n = "1/" + str(ctracks) + "       "
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                    track_n = "1/" + str(remainTracks) + "       "
                 else:
                     track_n  = str(Track_No) + "       "    
                 display()
@@ -859,7 +859,7 @@ while True:
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play.." + str(track_n)[0:5] 
             display()
             Disp_start = time.monotonic()
@@ -873,7 +873,7 @@ while True:
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play.." + str(track_n)[0:5] 
             time.sleep(0.5)
             timer2 = time.monotonic()
@@ -904,7 +904,7 @@ while True:
                 if album_mode == 0:
                     track_n = str(Track_No + 1) + "     "
                 else:
-                    track_n = "1/" + str(ctracks) + "       "
+                    track_n = "1/" + str(remainTracks) + "       "
                 msg1 = "Track.." + str(track_n)[0:5]
                 display()
                 defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
@@ -922,12 +922,12 @@ while True:
         if  buttonPREV.is_pressed and len(tracks) > 1:
             Disp_on = 1
             Track_No = goToPrevAlbum(Track_No)
-            ctracks = getRemainingAlbumTracks(Track_No)
+            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
             time.sleep(0.05)
             display()
@@ -938,12 +938,12 @@ while True:
                 # PREVIOUS ARTIST if pressed > 2 seconds
                 if time.monotonic() - timer3 > 2:
                     Track_No = goToPrevArtist(Track_No)
-                    ctracks = getRemainingAlbumTracks(Track_No)
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                     ( msg2, msg3, msg4) = getSongDetails(Track_No)
                     if album_mode == 0:
                         track_n = str(Track_No + 1) + "     "
                     else:
-                        track_n = "1/" + str(ctracks) + "       "
+                        track_n = "1/" + str(remainTracks) + "       "
                     msg1 = "Play:" + str(track_n)[0:5] 
                     display()
                     time.sleep(0.5)
@@ -963,7 +963,7 @@ while True:
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play.." + str(track_n)[0:5]
             time.sleep(0.5)
             timer2 = time.monotonic()
@@ -979,9 +979,9 @@ while True:
                     msg3 = ""
                     msg4 = ""
                     Track_No = goToNextAlbum(Track_No)
-                    ctracks = getRemainingAlbumTracks(Track_No)
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                     stimer = getRemainingAlbumTime(Track_No) 
-                    track_n = str(cplayed) + "/" + str(ctracks) + "       "
+                    track_n = str(currentTrack) + "/" + str(remainTracks) + "       "
                 else:
                     album_mode = 0
                     msg2 = "Album Mode OFF "
@@ -1035,7 +1035,7 @@ while True:
             if album_mode == 0:
                 track_n = str(Track_No + 1) + "     "
             else:
-                track_n = "1/" + str(ctracks) + "       "
+                track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play.." + str(track_n)[0:5]
             display()
             timer2 = time.monotonic()
@@ -1285,8 +1285,8 @@ while True:
             except:
                 pass
         # stop playing if end of album, in album mode
-        cplayed +=1
-        if cplayed > ctracks and album_mode == 1:
+
+        if currentTrack > remainTracks and album_mode == 1:
             status()
             msg1 = "Play.."
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
@@ -1366,7 +1366,7 @@ while True:
           if album_mode == 0:
               track_n = str(Track_No + 1) + "     "
           else:
-              track_n = str(cplayed) + "/" + str(ctracks)
+              track_n = str(currentTrack) + "/" + str(remainTracks)
           if album_mode == 0:
               msg1 = "Track:" + str(track_n)[0:5] + "   0%"
           else:
@@ -1441,7 +1441,7 @@ while True:
                 if album_mode == 0:
                     track_n = str(Track_No + 1) + "     "
                 else:
-                    track_n = str(cplayed) + "/" + str(ctracks) + "       "
+                    track_n = str(currentTrack) + "/" + str(remainTracks) + "       "
                 if xt < 2:
                     msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
                 elif xt == 2:
@@ -1550,7 +1550,7 @@ while True:
                 if album_mode == 0:
                     track_n = str(Track_No + 1) + "     "
                 else:
-                    track_n = "1/" + str(ctracks) + "       "
+                    track_n = "1/" + str(remainTracks) + "       "
                 msg1 = "Track.." + str(track_n)[0:5]
                 display()
                 defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
