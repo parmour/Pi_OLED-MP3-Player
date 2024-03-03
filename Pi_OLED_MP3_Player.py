@@ -42,17 +42,21 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-version  = "1.04"
+version  = "1.90"
 
 # set default variables (saved in config_file and overridden at future startups)
-MP3_Play     = 0    # set to 1 to start playing MP3s at boot, else 0
-radio        = 0    # set to 1 to start playing Radio at boot, else 0
 radio_stn    = 0    # selected radio station at startup 
-shuffled     = 0    # 0 = Unshuffled, 1 = Shuffled
-album_mode   = 1    # set to 1 for Album Mode, will play an album then stop
 gapless      = 0    # set to 1 for gapless play
 volume       = 50   # range 0 - 100
 Track_No     = 0
+player_mode  = 0    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+auto_start   = 0    # start playing radio or MP3 at startup
+
+
+
+MP3_Play     = 0    # 1 when playing MP3s, else 0
+radio        = 0    # 1 when playing radio, else 0
+
 
 # variables set once
 use_USB      = 0    # set to 0 if you ONLY use /home/pi/Music/... on SD card
@@ -62,32 +66,38 @@ sleep_shutdn = 0    # set to 1 to shutdown Pi when sleep times out
 Disp_timer   = 60   # Display timeout in seconds, set to 0 to disable
 show_clock   = 0    # set to 1 to show clock, only use if on web or using RTC
 gaptime      = 2    # set pre-start time for gapless, in seconds
-myUsername   = "philip"   # 
+myUsername   = "philip"   # os.getlogin() not always working when script run automatically
+buttonHold   = 3    # number of seconds you need to hold keys to get different behaviour
+numModes     = 4
 
 Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
               "Radio Paradise Main","http://stream.radioparadise.com/mp3-320",
               "Radio Paradise Mellow","http://stream.radioparadise.com/mellow-192",
               "Radio Caroline","http://sc6.radiocaroline.net:10558/"]
 
-# GPIO BUTTONS GPIO BCM numbers (Physical pin numbers)
+playerModeNames = ( "Album Favs", "Album Rand", "Rand Tracks", "Radio" )
 
-PREV   = 20 # (38) PREVIOUS TRACK  (whilst playing) / PREV ALBUM (whilst stopped) / PREV ARTIST (HOLD for 5 secs whilst stopped) 
-PLAY   = 12 # (32) PLAY / STOP / HOLD for 5 seconds for RADIO 
-NEXT   = 7  # (26) NEXT TRACK (whilst playing) / NEXT ALBUM (whilst stopped) / NEXT ARTIST (HOLD for 5 secs whilst stopped)
-SLEEP  = 25 # (22) Set SLEEP time, HOLD for 20 seconds to SHUTDOWN, set ALBUM MODE whilst stopped.
-VOLDN  = 16 # (36) Adjust volume DOWN whilst playing, set GAPLESS ON/OFF whilst stopped
-VOLUP  = 8  # (24) Adjust volume UP whilst playing, set RANDOM ON/OFF whilst stopped
+
+# GPIO BUTTONS GPIO BCM numbers (Physical pin numbers)
+#############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+PLAY   = 12 # (32) STOP                        | PLAY (MP3 / RADIO)   START PLAY FAVS 
+NEXT   = 7  # (26) NEXT TRACK/RADIO - NEXT ALB | BROWSE NEXT ALB - BROWSE NEXT ARTIST
+PREV   = 20 # (38) PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST
+VOLDN  = 16 # (36) VOL DN                      | VOL DN
+VOLUP  = 8  # (24) VOL UP                      | VOL UP
+FAVMODE = 25# (22) CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
+
+
+
+
 
 
 # check config file exists, if not then write default values
 config_file = "OLEDconfig.txt"
 if not os.path.exists(config_file):
-    defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-    with open(config_file, 'w') as f:
-        for item in defaults:
-            f.write("%s\n" % item)
+    writeDefaults()
 
-# read config file
+# read config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
 config = []
 with open(config_file, "r") as file:
    line = file.readline()
@@ -96,14 +106,24 @@ with open(config_file, "r") as file:
       line = file.readline()
 config = list(map(int,config))
 
-MP3_Play   = config[0]
-radio      = config[1]
-radio_stn  = config[2]
-shuffled   = config[3]
-album_mode = config[4]
-volume     = config[5]
-gapless    = config[6]
-Track_No   = config[7]
+
+radio_stn  = config[0]
+gapless    = config[1]
+volume     = config[2]
+Track_No   = config[3]
+player_mode = config[4] # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+auto_start = config[5]
+
+if auto_start:
+    if player_mode = 3:  # radio
+        MP3_Play   = 0
+        radio = 1
+    else:
+        MP3_Play   = 1
+        radio = 0
+
+
+
 
 if Track_No < 0:
     Track_No = 0
@@ -140,7 +160,7 @@ buttonPLAY  = Button(PLAY)
 buttonNEXT  = Button(NEXT)
 buttonVOLDN = Button(VOLDN)
 buttonVOLUP = Button(VOLUP)
-buttonSLEEP = Button(SLEEP)
+buttonFAVMODE = Button(FAVMODE)
 
 # initialise parameters
 old_album   = 0
@@ -219,10 +239,7 @@ def reload():
             f.write("%s\n" % item)
     msg1 = ("Tracks: " + str(len(tracks)))
     Track_No = 0
-    defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-    with open(config_file, 'w') as f:
-        for item in defaults:
-            f.write("%s\n" % item)
+    writeDefaults()
     display()
     if len(tracks) == 0:
         msg1 = "Tracks: " + str(len(tracks))
@@ -308,7 +325,6 @@ def getRemainingAlbumTime(trackNum):
     return timeRemaining
 
 def goToNextAlbum(trackNum):
-    global tracks
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
     nextAlbumStart = currentAlbumLast + 1
     if nextAlbumStart > len(tracks):
@@ -316,7 +332,6 @@ def goToNextAlbum(trackNum):
     return nextAlbumStart
 
 def goToNextArtist(trackNum):
-    global tracks
     ( currentArtistFirst, currentArtistLast) = getArtistStartFinish(trackNum)
     nextArtistStart = currentArtistLast + 1
     if nextArtistStart > len(tracks):
@@ -324,7 +339,6 @@ def goToNextArtist(trackNum):
     return nextArtistStart
 
 def goToPrevAlbum(trackNum):
-    global tracks
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
     prevAlbumEnd = currentAlbumFirst - 1
     if prevAlbumEnd > 0:
@@ -334,7 +348,6 @@ def goToPrevAlbum(trackNum):
     return prevAlbumFirst
 
 def goToPrevArtist(trackNum):
-    global tracks
     ( currentArtistFirst, currentArtistLast) = getArtistStartFinish(trackNum)
     prevArtistEnd = currentArtistFirst - 1
     if prevArtistEnd > 0:
@@ -342,6 +355,19 @@ def goToPrevArtist(trackNum):
     else:
         prevArtistFirst = 0
     return prevArtistFirst
+
+def goToRandomAlbum():
+    global albumTuple, albumDictionary
+    numAlbums = len(albumTuple)
+    selectedAlbumNum = random.randint(0, numAlbums - 1)
+    selectedAlbum = albumTuple[selectedAlbumNum]
+    ( currentAlbumFirst, currentAlbumLast) = albumDictionary[selectedAlbum]
+    return currentAlbumFirst
+
+def goToRandomTrack():
+    global tracks
+    selectedTrackNum = random.randint(0, len(tracks) - 1)
+    return selectedTrackNum
 
 def getSongDetails(trackNum):
     ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
@@ -355,9 +381,26 @@ def getSongDetails(trackNum):
         pass
     return ( out1, out2, out3)
 
+def displayMessage( messString ):
+    global msg2, msg3, msg4
+    msg2 = messString
+    msg3 = ""
+    msg4 = ""
+    display()
+    time.sleep(0.5)
+
+def writeDefaults():
+    # config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
+    global radio_stn, gapless, volume, Track_No, player_mode, auto_start, config_file
+    defaults = [radio_stn, gapless, volume, Track_No, player_mode, auto_start]
+    with open(config_file, 'w') as f:
+        for item in defaults:
+            f.write("%s\n" % item)
+
+
 
 def Set_Volume():
-    global mixername,m,msg1,msg2,msg3,msg4,MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless
+    global mixername,m,msg1,msg2,msg3,msg4,MP3_Play,radio,radio_stn,volume,gapless
     msg1 = "Set Volume.. " + str(volume)
     msg2 = ""
     msg3 = ""
@@ -380,24 +423,21 @@ def Set_Volume():
         os.system("amixer -D pulse sset Master " + str(volume) + "%")
         if mixername == "DSP Program":
             os.system("amixer set 'Digital' " + str(volume + 107))
-    defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-    with open(config_file, 'w') as f:
-        for item in defaults:
-            f.write("%s\n" % item)
+    writeDefaults()
 
 def status():
-    global txt,shuffled,gapless,album_mode,sleep_timer
+    global txt,player_mode,gapless,sleep_timer
     txt = " "
-    if shuffled == 1:
-        txt +="R"
+    if player_mode == 0:   # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+        txt +="FV"
+    elif player_mode == 1:
+        txt +="AR"
+    elif player_mode == 2:
+        txt +="RT"
     else:
         txt +=" "
     if gapless == 1:
         txt +="G"
-    else:
-        txt +=" "
-    if album_mode == 1:
-        txt +="A"
     else:
         txt +=" "
     if sleep_timer > 0:
@@ -517,6 +557,15 @@ if len(alsaaudio.mixers()) > 0:
 if MP3_Play == 1:
     radio = 0
     
+# try reloading tracks if one selected not found
+if len(tracks) > 0:
+    track = getTrack(Track_No)
+    if not os.path.exists (track) and usb_found > 0 and stop == 0:
+        reload()
+
+# populate albumDictionary, artistDictionary, albumTuple, artistTuple
+loadTrackDictionaries()
+
 # wait for internet connection
 if radio == 1:
     msg1 = "Waiting for Radio..."
@@ -526,49 +575,34 @@ if radio == 1:
     msg1 = (Radio_Stns[radio_stn])
     msg2 = ""
     display()
-
-# try reloading tracks if one selected not found
-if len(tracks) > 0:
-    track = getTrack(Track_No)
-    if not os.path.exists (track) and usb_found > 0 and stop == 0:
-        reload()
-
-# populate albumDictionary, artistDictionary, albumTuple, artistTuple
-loadTrackDictionaries()  
-
-if album_mode == 1 and len(tracks) > 0:
-    # determine album length and number of tracks
-
-    shuffled = 0
-    if album_mode == 1:
-        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-        stimer = getRemainingAlbumTime(Track_No) 
+else:
+    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+    stimer = getRemainingAlbumTime(Track_No)    
 
 
-if album_mode == 0:
+
+
+
+if player_mode == 2:   # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
     track_n = str(Track_No + 1) + "     "
 else:
     track_n = "1/" + str(remainTracks) + "       "
 
 status()
+
+if gapless == 0:
+    gap = 0
+else:
+    gap = gaptime    
     
-if shuffled == 1 and gapless == 0:
-    gap = 0
-    shuffle(tracks)
-elif shuffled == 0 and gapless == 0:
-    gap = 0
-elif shuffled == 1 and gapless != 0:
-    gap = gaptime
-    shuffle(tracks)
-elif shuffled == 0 and gapless != 0:
-    gap = gaptime
+
 
 if len(tracks) > 0:
     ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
 
 sleep_timer_start = time.monotonic()
 Disp_start        = time.monotonic()
-timer2            = time.monotonic()
+timer1            = time.monotonic()
 sync_timer        = time.monotonic()
 xt                = 0
 
@@ -591,8 +625,26 @@ try:
 except:
     pass
 
-while True:
-    # loop while stopped
+
+# 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+if player_mode == 0:
+    player_mode = 1   # Album Rand
+
+if player_mode == 1:   # Album Rand
+    # move Track_No to start of random album
+    Track_No = goToRandomAlbum()
+
+
+if player_mode == 2:   # Rand Tracks
+    # move Track_No to random track
+    Track_No = goToRandomTrack()
+
+
+while True:    
+    #################################################
+    ######       loop while stopped   ###############
+    #################################################
+    #print("MP3 Play: " + str(MP3_Play) + "   radio: " + str(radio))
     while MP3_Play == 0 and radio == 0:
         # check if clock synchronised
         if time.monotonic() - sync_timer > 30:
@@ -615,11 +667,11 @@ while True:
                 pass
             
         # display Artist / Album / Track names
-        if time.monotonic() - timer2 > 3 and Disp_on == 1 and len(tracks) > 0:
+        if time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0:
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            timer2 = time.monotonic()
+            timer1 = time.monotonic()
             if xt < 2:
-                if album_mode == 0:
+                if player_mode == 2:
                     track_n = str(Track_No + 1) + "     "
                 else:
                     track_n = "1/" + str(remainTracks) + "       "
@@ -689,7 +741,7 @@ while True:
                 else:
                     msg2 = "STOPPING in " + str(t)
                 display()
-                if buttonSLEEP.is_pressed or buttonPLAY.is_pressed:
+                if buttonFAVMODE.is_pressed or buttonPLAY.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -712,301 +764,218 @@ while True:
                     os.system("sudo shutdown -h now")
             else:
                 status()
-                if album_mode == 0:
+                if player_mode == 2:
                     track_n = str(Track_No + 1) + "     "
                 else:
                     track_n = "1/" + str(remainTracks) + "       "
                 msg1 = "Play.." + str(track_n)[0:5]
                 display()
             Disp_start = time.monotonic()
+
+
+
+
+        ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+        # PLAY               STOP                        | PLAY (MP3 / RADIO)   START PLAY FAVS 
+        ######################################################################################
+
             
-        # check for PLAY key
+        # PLAY key while stopped
         if buttonPLAY.is_pressed:
             stopped = 0
             Disp_on = 1
             Disp_start = time.monotonic()
             timer1 = time.monotonic()
             album = 0
-            msg2 = "HOLD 5s for RADIO"
-            msg3 = ""
-            msg4 = ""
-            display()
-            time.sleep(0.5)
+            displayMessage( "HOLD 5s: Play Favs" )
             sleep_timer = 0
-            while buttonPLAY.is_pressed and time.monotonic() - timer1 < 5:
+            while buttonPLAY.is_pressed and time.monotonic() - timer1 < buttonHold:
                 pass
-            if time.monotonic() - timer1 < 5 and len(tracks) > 0:
-                # determine album length and number of tracks
-                if album_mode == 1:
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    stimer = getRemainingAlbumTime(Track_No) 
-                atimer = time.monotonic()
-                MP3_Play = 1
-                radio    = 0
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-            else:
-                msg2 = ""
-                msg3 = ""
-                msg4 = ""
-                q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-                time.sleep(0.05)
-                msg1 = (Radio_Stns[radio_stn])
-                display()
-                rs = Radio_Stns[radio_stn]
-                while buttonPLAY.is_pressed:
-                    pass
-                time.sleep(1)
-                radio    = 1
-                MP3_Play = 0
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
+            if time.monotonic() - timer1 < buttonHold and len(tracks) > 0:
+                ## PUSH
+                # player mode is radio
+                if player_mode == 3:
+                    msg2 = ""
+                    msg3 = ""
+                    msg4 = ""
+                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
+                    time.sleep(0.05)
+                    msg1 = (Radio_Stns[radio_stn])
+                    display()
+                    rs = Radio_Stns[radio_stn]
+                    while buttonPLAY.is_pressed:
+                        pass
+                    time.sleep(1)
+                    radio    = 1
+                    MP3_Play = 0
+                    writeDefaults()                
+                # player mode is not radio
+                else:
+                    if player_mode == 0 or player_mode == 1:
+                        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                        stimer = getRemainingAlbumTime(Track_No) 
+                    atimer = time.monotonic()
+                    MP3_Play = 1
+                    radio    = 0
+                    writeDefaults()
+            else:   # HOLD
+                # player mode is not radio
+                if player_mode != 3:
+                    pass   # play from start of favourites
+
+
+        ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+        # NEXT              NEXT TRACK/RADIO - NEXT ALB | BROWSE NEXT ALB - BROWSE NEXT ARTIST 
+        ######################################################################################
                 
-        # check NEXT ALBUM / ARTIST key
+        # check NEXT key when stopped
         if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
             Track_No = goToNextAlbum(Track_No)
             (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if album_mode == 0:
+            if player_mode == 2:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
             display()
-            timer3 = time.monotonic()
+            timer1 = time.monotonic()
             album = 1
-            while buttonNEXT.is_pressed:
-                # NEXT ARTIST if pressed > 2 seconds
-                if time.monotonic() - timer3 > 2:
-                    if buttonSLEEP.is_pressed == 0:
-                        Track_No = goToNextArtist(Track_No)
-                    else:
-                        for doAgain in range(0,5):   # skip forward 5 artists at a time
-                            Track_No = goToNextArtist(Track_No)
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    ( msg2, msg3, msg4) = getSongDetails(Track_No)
-                    if album_mode == 0:
-                        track_n = str(Track_No + 1) + "     "
-                    else:
-                        track_n = "1/" + str(remainTracks) + "       "
-                    msg1 = "Play:" + str(track_n)[0:5] 
-                    display()
-                    time.sleep(0.5)
-
-            defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-            with open(config_file, 'w') as f:
-                for item in defaults:
-                    f.write("%s\n" % item)
-            Disp_start = time.monotonic()
-            timer2 = time.monotonic()
-                        
-        # check for VOLUP  key
-        if buttonVOLUP.is_pressed and Disp_on == 0:
-            Disp_on = 1
-            Disp_start = time.monotonic()
-            status()
-            if album_mode == 0:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play.." + str(track_n)[0:5]
-            time.sleep(0.5)
-            timer2 = time.monotonic()
-        elif buttonVOLUP.is_pressed:
-            time.sleep(0.5)
-            timer1 = time.monotonic()
-            while buttonVOLUP.is_pressed and time.monotonic() - timer1 < 2:
+            while buttonNEXT.is_pressed and time.monotonic() - timer1 < buttonHold:
                 pass
-            if time.monotonic() - timer1 < 1:
-                msg2 = ""
-                msg3 = ""
-                msg4 = ""
-                if shuffled == 0:
-                    shuffled = 1
-                    #shuffle(tracks)
-                    #Track_No = 0
-                    album_mode = 0
-                    track_n  = str(Track_No + 1) + "     "
-                    msg2 = "Random Mode ON "
-                    
-                else:
-                    shuffled = 0
-                    msg2 = "Random Mode OFF "
-                    ####
-                if album_mode == 1:
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    track_n = "1/" + str(remainTracks) + "       "
-                else:
-                    track_n  = str(Track_No) + "       "    
-                display()
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-                time.sleep(1)
-                timer2 = time.monotonic()
-                xt = 2
-            else:                  
-                Set_Volume()
-
-            status()
-            if album_mode == 0:
+            if time.monotonic() - timer1 < buttonHold and len(tracks) > 0:
+                # PUSH
+                Track_No = goToNextAlbum(Track_No)
+            else:
+                # HOLD
+                Track_No = goToNextArtist(Track_No)
+            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
+            if player_mode == 2:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play.." + str(track_n)[0:5] 
+            msg1 = "Play:" + str(track_n)[0:5] 
             display()
-            Disp_start = time.monotonic()
-            timer2 = time.monotonic()
-
-        # check for VOLDN  key
-        if  buttonVOLDN.is_pressed and Disp_on == 0:
-            Disp_on = 1
-            Disp_start = time.monotonic()
-            status()
-            if album_mode == 0:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play.." + str(track_n)[0:5] 
             time.sleep(0.5)
-            timer2 = time.monotonic()
-        elif buttonVOLDN.is_pressed:
-            time.sleep(0.5)
+            writeDefaults()
+            Disp_start = time.monotonic()
             timer1 = time.monotonic()
-            timer = time.monotonic()
-            while buttonVOLDN.is_pressed and time.monotonic() - timer < 2:
-                pass
-            if time.monotonic() - timer < 1:
-                if gapless == 0:
-                    gap = gaptime
-                    gapless = 1
-                    msg2 = "Gapless ON"
-                    msg3 = ""
-                    msg4 = ""
-                    display()
-                    time.sleep(1)
-                else:
-                    gap = 0
-                    gapless = 0
-                    msg2 = "Gapless OFF"
-                    msg3 = ""
-                    msg4 = ""
-                    display()
-                    time.sleep(1)
-                status()
-                if album_mode == 0:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Track.." + str(track_n)[0:5]
-                display()
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-                time.sleep(0.5)
-                timer2 = time.monotonic()
-                xt = 2
-            else:                  
-                Set_Volume()
-                timer2 = time.monotonic()
-                
-        # check for PREVIOUS ALBUM key 
+
+
+        ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+        # PREV              PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST 
+        ######################################################################################
+
+        # check PREV key when stopped
         if  buttonPREV.is_pressed and len(tracks) > 1:
             Disp_on = 1
+            time.sleep(0.2)
             Track_No = goToPrevAlbum(Track_No)
             (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if album_mode == 0:
+            if player_mode == 2:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(remainTracks) + "       "
             msg1 = "Play:" + str(track_n)[0:5] 
-            time.sleep(0.05)
             display()
-            time.sleep(0.05)
-            timer3 = time.monotonic()
+            timer1 = time.monotonic()
             album = 1
-            while buttonPREV.is_pressed:
-                # PREVIOUS ARTIST if pressed > 2 seconds
-                if time.monotonic() - timer3 > 2:
-                    Track_No = goToPrevArtist(Track_No)
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    ( msg2, msg3, msg4) = getSongDetails(Track_No)
-                    if album_mode == 0:
-                        track_n = str(Track_No + 1) + "     "
-                    else:
-                        track_n = "1/" + str(remainTracks) + "       "
-                    msg1 = "Play:" + str(track_n)[0:5] 
-                    display()
-                    time.sleep(0.5)
-
-            defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-            with open(config_file, 'w') as f:
-                for item in defaults:
-                    f.write("%s\n" % item)
-            Disp_start = time.monotonic()
-            timer2 = time.monotonic()
-            
-        # check for SLEEP key
-        if  buttonSLEEP.is_pressed and Disp_on == 0:
-            Disp_on = 1
-            Disp_start = time.monotonic()
-            status()
-            if album_mode == 0:
+            while buttonPREV.is_pressed and time.monotonic() - timer1 < buttonHold:
+                pass
+            if time.monotonic() - timer1 < buttonHold and len(tracks) > 0:
+                # PUSH
+                Track_No = goToPrevAlbum(Track_No)
+            else:
+                # HOLD
+                Track_No = goToPrevArtist(Track_No)
+            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+            ( msg2, msg3, msg4) = getSongDetails(Track_No)
+            if player_mode == 2:
                 track_n = str(Track_No + 1) + "     "
             else:
                 track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play.." + str(track_n)[0:5]
+            msg1 = "Play:" + str(track_n)[0:5] 
+            display()
             time.sleep(0.5)
-            timer2 = time.monotonic()
-        elif buttonSLEEP.is_pressed:
+            writeDefaults()
+            Disp_start = time.monotonic()
             timer1 = time.monotonic()
-            while buttonSLEEP.is_pressed and time.monotonic() - timer1 < 2:
+
+
+        ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+        # VOLDN             VOL DN                      | VOL DN
+        # VOLUP             VOL UP                      | VOL UP 
+        ######################################################################################
+
+
+        # check for VOLUP or VOLDN key when stopped
+        if buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
+            if Disp_on == 0:
+                Disp_on = 1
+                Disp_start = time.monotonic()
+                status()
+                if player_mode == 2:
+                    track_n = str(Track_No + 1) + "     "
+                else:
+                    track_n = "1/" + str(remainTracks) + "       "
+                msg1 = "Play.." + str(track_n)[0:5]
+                time.sleep(0.5)
+            Set_Volume()
+            time.sleep(0.5)
+
+
+                
+        ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+        # FAVMODE           CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
+        ######################################################################################
+            
+        # check for FAVMODE key when stopped
+        if  buttonFAVMODE.is_pressed:
+            if Disp_on == 0:
+                Disp_on = 1
+                Disp_start = time.monotonic()
+                status()
+                if player_mode == 2:
+                    track_n = str(Track_No + 1) + "     "
+                else:
+                    track_n = "1/" + str(remainTracks) + "       "
+                msg1 = "Play.." + str(track_n)[0:5]
+                time.sleep(0.5)
+                displayMessage( playerModeNames[player_mode] + "   ")
+            timer1 = time.monotonic()
+            while buttonFAVMODE.is_pressed and time.monotonic() - timer1 < 2:
                 pass
             if time.monotonic() - timer1 < 1:
-                if album_mode == 0:
-                    album_mode = 1
-                    shuffled    = 0
-                    msg2 = "Album Mode ON "
-                    msg3 = ""
-                    msg4 = ""
-                    Track_No = goToNextAlbum(Track_No)
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    stimer = getRemainingAlbumTime(Track_No) 
-                    track_n = str(currentTrack) + "/" + str(remainTracks) + "       "
-                else:
-                    album_mode = 0
-                    msg2 = "Album Mode OFF "
-                    msg3 = ""
-                    msg4 = ""
-                    track_n  = str(Track_No) + "     "
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-                display()
-                time.sleep(1)
-
-            else:    
+                ################
+                # Rotate through Modes  !!!
+                ##############
+                player_mode += 1
+                player_mode = ( player_mode % numModes )
+                displayMessage( playerModeNames[player_mode] + "   ")
+                if player_mode == 0:   # Album Favs
+                    pass
+                elif player_mode == 1:   # Album Rand
+                    pass
+                elif player_mode == 2:   # Rand Tracks
+                    pass
+                else:     # Radio
+                    pass
+                # SHUTDOWN IF PRESSED FOR 10 SECONDS
                 sleep_timer +=900
                 if sleep_timer > 7200:
                     sleep_timer = 0
                 sleep_timer_start = time.monotonic()
                 msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                msg2 = "HOLD for 20 to SHUTDOWN "
+                msg2 = "HOLD for 10 to SHUTDOWN "
                 msg3 = ""
                 msg4 = ""
                 display()
                 time.sleep(0.25)
-                while buttonSLEEP.is_pressed:
+                while buttonFAVMODE.is_pressed:
                     sleep_timer +=900
                     if sleep_timer > 7200:
                          sleep_timer = 0
@@ -1014,11 +983,11 @@ while True:
                     msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
                     display()
                     time.sleep(1)
-                    if time.monotonic() - timer1 > 10:
-                        msg2 = "SHUTDOWN in " + str(20-int(time.monotonic() - timer1))
+                    if time.monotonic() - timer1 > 5:
+                        msg2 = "SHUTDOWN in " + str(10-int(time.monotonic() - timer1))
                         display()
-                    if time.monotonic() - timer1 > 20:
-                        # shutdown if pressed for 20 seconds
+                    if time.monotonic() - timer1 > 10:
+                        # shutdown if pressed for 10 seconds
                         msg1 = "SHUTTING DOWN..."
                         msg2 = ""
                         msg3 = ""
@@ -1031,17 +1000,19 @@ while True:
                         radio = 0
                         time.sleep(1)
                         os.system("sudo shutdown -h now")
-            status()
-            if album_mode == 0:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play.." + str(track_n)[0:5]
-            display()
-            timer2 = time.monotonic()
-            xt = 2
+                status()
+                if player_mode == 2:
+                    track_n = str(Track_No + 1) + "     "
+                else:
+                    track_n = "1/" + str(remainTracks) + "       "
+                msg1 = "Play.." + str(track_n)[0:5]
+                display()
+                timer1 = time.monotonic()
+                xt = 2
             
-    # loop while playing Radio
+    #######################################################
+    ######       loop while playing radio   ###############
+    #######################################################
     while radio == 1:
         time.sleep(0.2)
         # check if clock synchronised
@@ -1085,7 +1056,7 @@ while True:
                 else:
                     msg2 = "STOPPING in " + str(t)
                     display()
-                if buttonSLEEP.is_pressed:
+                if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -1154,7 +1125,7 @@ while True:
             display()
             Set_Volume()
             time.sleep(0.5)
-            timer2 = time.monotonic()
+            timer1 = time.monotonic()
 
         # check for VOLUP key
         if  buttonVOLUP.is_pressed:
@@ -1163,7 +1134,7 @@ while True:
             display()
             Set_Volume()
             time.sleep(0.5)
-            timer2 = time.monotonic()
+            timer1 = time.monotonic()
                 
         # check PREV key
         if buttonPREV.is_pressed:
@@ -1177,11 +1148,8 @@ while True:
             msg1 = (Radio_Stns[radio_stn])
             display()
             rs = Radio_Stns[radio_stn] + "               "[0:19]
-            defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-            with open(config_file, 'w') as f:
-                for item in defaults:
-                    f.write("%s\n" % item)
-            timer2 = time.monotonic()
+            writeDefaults()
+            timer1 = time.monotonic()
             
         # check NEXT key
         if buttonNEXT.is_pressed:
@@ -1195,11 +1163,8 @@ while True:
             msg1 = (Radio_Stns[radio_stn])
             display()
             rs = Radio_Stns[radio_stn] + "               "[0:19]
-            defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-            with open(config_file, 'w') as f:
-                for item in defaults:
-                    f.write("%s\n" % item)
-            timer2 = time.monotonic()
+            writeDefaults()
+            timer1 = time.monotonic()
             time.sleep(0.5)
             
         # check PLAY (STOP Radio) key
@@ -1213,56 +1178,15 @@ while True:
             else:
                 msg1 = "Radio Stopped      "
             display()
-            defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-            with open(config_file, 'w') as f:
-                for item in defaults:
-                    f.write("%s\n" % item)
+            writeDefaults()
             time.sleep(2)
             
 
-        # check for sleep_timer key
-        if buttonSLEEP.is_pressed:
-            Disp_on = 1
-            Disp_start = time.monotonic()
-            timer1 = time.monotonic()
-            msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-            msg2 = "HOLD for 20 to SHUTDOWN "
-            msg3 = ""
-            display()
-            while buttonSLEEP.is_pressed:
-                sleep_timer +=900
-                if sleep_timer > 7200:
-                     sleep_timer = 0
-                sleep_timer_start = time.monotonic()
-                msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                display()
-                time.sleep(1)
-                if time.monotonic() - timer1 > 10:
-                    msg2 = "SHUTDOWN in " + str(20-int(time.monotonic() - timer1))
-                    display()
-                if time.monotonic() - timer1 > 20:
-                    # shutdown if pressed for 20 seconds
-                    msg1 = "SHUTTING DOWN..."
-                    msg2 = ""
-                    msg3 = ""
-                    msg4 = ""
-                    display()
-                    time.sleep(2)
-                    msg1 = ""
-                    display()
-                    MP3_Play = 0
-                    radio = 0
-                    time.sleep(1)
-                    os.system("sudo shutdown -h now")
-            Disp_start = time.monotonic()
-            time.sleep(0.5)
-            msg1 = Radio_Stns[radio_stn]
-            msg2 = ""
-            display()
-            timer2 = time.monotonic()
-            xt = 2
+
                     
-    # loop while playing MP3 tracks
+    ############################################################
+    ######       loop while playing MP3 tracks   ###############
+    ############################################################
     while MP3_Play == 1 :
         time.sleep(0.05)
         # check if clock synchronised
@@ -1286,7 +1210,7 @@ while True:
                 pass
         # stop playing if end of album, in album mode
 
-        if currentTrack > remainTracks and album_mode == 1:
+        if currentTrack > remainTracks and player_mode != 2:
             status()
             msg1 = "Play.."
             ( msg2, msg3, msg4) = getSongDetails(Track_No)
@@ -1310,7 +1234,7 @@ while True:
                     msg3 = ""
                     msg4 = ""
                     display()
-                if buttonSLEEP.is_pressed:
+                if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
                     abort_sd = 1
@@ -1363,11 +1287,11 @@ while True:
         if MP3_Play == 1 and len(tracks) > 0:
           track = getTrack(Track_No)
           ( msg2, msg3, msg4) = getSongDetails(Track_No)
-          if album_mode == 0:
+          if player_mode == 2:
               track_n = str(Track_No + 1) + "     "
           else:
               track_n = str(currentTrack) + "/" + str(remainTracks)
-          if album_mode == 0:
+          if player_mode == 2:
               msg1 = "Track:" + str(track_n)[0:5] + "   0%"
           else:
               msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
@@ -1380,7 +1304,6 @@ while True:
           poll = p.poll()
           while poll != None:
             poll = p.poll()
-          timer2 = time.monotonic()
           timer1 = time.monotonic()
           xt = 0
           go = 1
@@ -1434,11 +1357,11 @@ while True:
                 display()
            
             # display titles, status etc
-            if time.monotonic() - timer2 > 2 and Disp_on == 1:
+            if time.monotonic() - timer1 > 2 and Disp_on == 1:
                 ( msg2, msg3, msg4) = getSongDetails(Track_No)
-                timer2    = time.monotonic()
+                timer1    = time.monotonic()
                 played_pc =  "     " + str(played_pc)
-                if album_mode == 0:
+                if player_mode == 2:
                     track_n = str(Track_No + 1) + "     "
                 else:
                     track_n = str(currentTrack) + "/" + str(remainTracks) + "       "
@@ -1470,8 +1393,13 @@ while True:
                 xt +=1
                 if xt > 5:
                     xt = 0
+
+
+            ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+            # PLAY               STOP                        | PLAY (MP3 / RADIO)   START PLAY FAVS 
+            ######################################################################################
                     
-            # check for PLAY (STOP) key
+            # check for PLAY (STOP) key when playing MP3
             if  buttonPLAY.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
@@ -1488,14 +1416,49 @@ while True:
                 display()
                 go = 0
                 MP3_Play = 0
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-                timer2 = time.monotonic()
+                writeDefaults()
+
+
+
+
+            ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+            # NEXT              NEXT TRACK/RADIO - NEXT ALB | BROWSE NEXT ALB - BROWSE NEXT ARTIST 
+            ######################################################################################
+
                 
-            # check for PREVIOUS TRACK key 
-            elif buttonPREV.is_pressed:
+            # check for NEXT key when playing MP3
+            if  buttonNEXT.is_pressed:
+                Disp_on = 1
+                Disp_start = time.monotonic()
+                os.killpg(p.pid, SIGTERM)
+                # add current track number to history, if not already last item
+                if go == 1:
+                    
+                    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+                    # if Rand Tracks choose another track at random which is not in the history
+                    if player_mode = 2:
+                        Track_No = goToRandomTrack()
+                        
+                    # if Album Favs go to the next track in the album, if at last track, go to the next favourite, if no more favourites change to Album Rand
+                    # if Album Rand go to the next track in the album, if at last track, go to a random album which is not in album history
+                    elif player_mode = 1 or player_mode = 2:
+                        (tracksRemaining, currentTrack ) = getAlbumTracksInfo(Track_No)
+                        if tracksRemaining == 0: # finished playing album
+                            Track_No = goToRandomAlbum()
+                        else:
+                            Track_No = ( (Track_No + 1) % len(tracks))
+                            
+
+                go = 0
+
+
+
+            ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+            # PREV              PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST 
+            ######################################################################################
+                
+            # check for PREV key when playing MP3
+            if buttonPREV.is_pressed:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 Disp_on = 1
@@ -1505,133 +1468,57 @@ while True:
                     if Track_No < 0:
                         Track_No = len(tracks) + Track_No
                 go = 0
-                timer2 = time.monotonic()
-                
-            # check for NEXT TRACK key 
-            elif  buttonNEXT.is_pressed:
-                Disp_on = 1
-                Disp_start = time.monotonic()
-                os.killpg(p.pid, SIGTERM)
-                if go == 1:
-                    Track_No += 1
-                    if Track_No > len(tracks) - 1:
-                        Track_No = Track_No - len(tracks)
-                go = 0
-                timer2 = time.monotonic()
 
-            # check for VOLDN  key
-            elif buttonVOLDN.is_pressed:
-              Disp_on = 1
-              Disp_start = time.monotonic()
-              display()
-              time.sleep(0.5)
-              timer1 = time.monotonic()
-              timer  = time.monotonic()
-              while buttonVOLDN.is_pressed and time.monotonic() - timer < 2:
-                pass
-              if time.monotonic() - timer < 1:
-                if gapless == 0:
-                    gap = gaptime
-                    gapless = 1
-                    msg2 = "Gapless ON"
-                    msg3 = ""
-                    msg4 = ""
-                    display()
-                    time.sleep(1)
-                else:
-                    gap = 0
-                    gapless = 0
-                    msg2 = "Gapless OFF"
-                    msg3 = ""
-                    msg4 = ""
-                    display()
-                    time.sleep(1)
-                status()
-                if album_mode == 0:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Track.." + str(track_n)[0:5]
-                display()
-                defaults = [MP3_Play,radio,radio_stn,shuffled,album_mode,volume,gapless,Track_No]
-                with open(config_file, 'w') as f:
-                    for item in defaults:
-                        f.write("%s\n" % item)
-                time.sleep(0.5)
-                timer2 = time.monotonic()
-                xt = 2
-              else:                  
-                Set_Volume()
-                timer2 = time.monotonic()
 
-            # check for VOLUP key
-            elif buttonVOLUP.is_pressed:
-                Disp_on = 1
-                Disp_start = time.monotonic()
-                display()
+
+
+            ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+            # VOLDN             VOL DN                      | VOL DN
+            # VOLUP             VOL UP                      | VOL UP 
+            ######################################################################################
+
+
+            # check for VOLDN or VOLDN key when playing MP3
+            if buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
+                if Disp_on == 0:
+                    Disp_on = 1
+                    Disp_start = time.monotonic()
+                    status()
+                    if player_mode == 2:
+                        track_n = str(Track_No + 1) + "     "
+                    else:
+                        track_n = "1/" + str(remainTracks) + "       "
+                    msg1 = "Play.." + str(track_n)[0:5]
+                    time.sleep(0.5)
                 Set_Volume()
                 time.sleep(0.5)
-                timer2 = time.monotonic()
- 
+
+            ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
+            # FAVMODE           CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
+            ######################################################################################
                            
-            # check for SLEEP key
-            elif  buttonSLEEP.is_pressed and Disp_on == 0:
-                Disp_start = time.monotonic()
-                Disp_on = 1
-                status()
-                msg1 = "Track.." + str(track_n)[0:5] + txt
-                display()
-                time.sleep(1)
-                timer2 = time.monotonic()
-            elif buttonSLEEP.is_pressed:
+            # check for FAVMODE key when playing MP3
+            if  buttonFAVMODE.is_pressed:
+                if Disp_on == 0:
+                    Disp_start = time.monotonic()
+                    Disp_on = 1
+                    status()
+                    msg1 = "Track.." + str(track_n)[0:5] + txt
+                    display()
+                    time.sleep(1)
                 Disp_on = 1
                 timer1 = time.monotonic()
-                if (sleep_timer == 0 and album_mode == 0) or (album_mode ==1 and sleep_timer == stimer + 60):
-                    sleep_timer = 900
-                elif sleep_timer == 0 and shuffled == 0 and album_mode == 1:
-                    # determine album length to set sleep time
-                    stimer = getRemainingAlbumTime(Track_No) 
-                    sleep_timer = stimer + 60
+                while buttonFAVMODE.is_pressed and time.monotonic() - timer1 < buttonHold:
+                    pass
+                if time.monotonic() - timer1 < buttonHold and len(tracks) > 0:
+                    # PUSH
+                    pass  # add current album to favourites
                 else:
-                    sleep_timer = (time_left * 60) + 960
-                    if sleep_timer > 10800:
-                        sleep_timer = 0
-                sleep_timer_start = time.monotonic()
-                msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                msg2 = "HOLD for 20 to SHUTDOWN "
-                msg3 = ""
-                msg4 = ""
-                display()
-                time.sleep(1)
-                while buttonSLEEP.is_pressed:
-                    if album_mode == 0:
-                        sleep_timer +=900
-                        if sleep_timer > 7200:
-                            sleep_timer = 0
-                        sleep_timer_start = time.monotonic()
-                        msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                        display()
-                        time.sleep(1)
-                    if time.monotonic() - timer1 > 10:
-                        msg2 = "SHUTDOWN in " + str(20-int(time.monotonic() - timer1))
-                    if time.monotonic() - timer1 > 20:
-                        # shutdown if pressed for 20 seconds
-                        msg1 = "SHUTTING DOWN..."
-                        time.sleep(0.05)
-                        msg2 = ""
-                        msg3 = ""
-                        msg4 = ""
-                        display()
-                        time.sleep(2)
-                        msg1 = ""
-                        display()
-                        MP3_Play = 0
-                        radio = 0
-                        time.sleep(1)
-                        os.system("sudo shutdown -h now")
-                Disp_start = time.monotonic()
-                timer2 = time.monotonic()
-                xt = 2
+                    # HOLD
+                    pass  # remove current album from favourites
+
+
+
                 
             poll = p.poll()
             
