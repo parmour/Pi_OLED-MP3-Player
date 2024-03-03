@@ -87,7 +87,30 @@ VOLDN  = 16 # (36) VOL DN                      | VOL DN
 VOLUP  = 8  # (24) VOL UP                      | VOL UP
 FAVMODE = 25# (22) CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
 
+favourites_file = "favourites.txt"
 
+def writeFavourites():
+    global favourites_file, albumFavourites
+    with open(favourites_file, 'w') as f:
+        for item in albumFavourites:
+            f.write("%s\n" % item)
+
+# read favourites if existing
+if os.path.exists(favourites_file):
+    albumFavourites = []
+    with open(favourites_file, "r") as file:
+       line = file.readline()
+       while line:
+          favourites_file.append(line.strip())
+          line = file.readline()
+
+def writeDefaults():
+    # config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
+    global radio_stn, gapless, volume, Track_No, player_mode, auto_start, config_file
+    defaults = [radio_stn, gapless, volume, Track_No, player_mode, auto_start]
+    with open(config_file, 'w') as f:
+        for item in defaults:
+            f.write("%s\n" % item)
 
 
 
@@ -115,14 +138,15 @@ player_mode = config[4] # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = R
 auto_start = config[5]
 
 if auto_start:
-    if player_mode = 3:  # radio
+    if player_mode == 3:  # radio
         MP3_Play   = 0
         radio = 1
     else:
         MP3_Play   = 1
         radio = 0
 
-
+trackHistory = []
+albumFavourites = []
 
 
 if Track_No < 0:
@@ -192,6 +216,8 @@ usb_found   = 0
 h_user  = []
 h_user.append(myUsername)   # os.getlogin() not always working when script run automatically
 
+favouritesIndex = 0
+
 def getTrack(trackNum):
     global tracks
     titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[trackNum].split("/")
@@ -250,9 +276,9 @@ def reload():
 
 
 def loadTrackDictionaries():
-    global tracks, albumDictionary, artistDictionary, albumTuple, artistTuple
-    albumTuple = ()    #   list of all albums in order    Because album names might not be unique, format is "AlbumName - Artist"
-    artistTuple = ()   #   list of all artists in order
+    global tracks, albumDictionary, artistDictionary, albumList, artistList
+    albumList = []    #   list of all albums in order    Because album names might not be unique, format is "AlbumName - Artist"
+    artistList = []   #   list of all artists in order
     albumDictionary = {}   #  key is album ("AlbumName - Artist"), value is (first track number, last track number)
     artistDictionary = {}   #  key is artist, value is (first track number, last track number)
     currentArtist = ""
@@ -264,10 +290,10 @@ def loadTrackDictionaries():
     for trackNum in range(0,len(tracks)):
         ( artist, album, song, path1, path2, path3, path4 ) = tracks[trackNum].split("/")
         uniqAlbum = album + " - " + artist   # Because album names might not be unique, format is "AlbumName - Artist"
-        if artist not in artistTuple:
-            artistTuple += ( artist, )
-        if uniqAlbum not in albumTuple:
-            albumTuple += ( uniqAlbum, )
+        if artist not in artistList:
+            artistList.append(artist)
+        if uniqAlbum not in albumList:
+            albumList.append(uniqAlbum)
         if not currentArtist:
             currentArtist = artist
         elif artist != currentArtist:
@@ -312,7 +338,7 @@ def getArtistStartFinish(trackNum):
 def getAlbumTracksInfo(trackNum):
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
     numRemainingTracks = currentAlbumLast - trackNum
-    currentTrack = trackNum - currentAlbumFirst + 1
+    currentTrack = (trackNum - currentAlbumFirst) + 1
     return ( numRemainingTracks, currentTrack )
 
 def getRemainingAlbumTime(trackNum):
@@ -357,10 +383,10 @@ def goToPrevArtist(trackNum):
     return prevArtistFirst
 
 def goToRandomAlbum():
-    global albumTuple, albumDictionary
-    numAlbums = len(albumTuple)
+    global albumList, albumDictionary
+    numAlbums = len(albumList)
     selectedAlbumNum = random.randint(0, numAlbums - 1)
-    selectedAlbum = albumTuple[selectedAlbumNum]
+    selectedAlbum = albumList[selectedAlbumNum]
     ( currentAlbumFirst, currentAlbumLast) = albumDictionary[selectedAlbum]
     return currentAlbumFirst
 
@@ -381,21 +407,71 @@ def getSongDetails(trackNum):
         pass
     return ( out1, out2, out3)
 
+
+def goToNextFavourite():
+    global favouritesIndex, albumDictionary, albumList
+    nextFav = albumFavourites[favouritesIndex]
+    nextUniqAlbum = albumList[nextFav]
+    ( favAlbumFirst, favAlbumLast) = albumDictionary[nextUniqAlbum]
+    favouritesIndex += 1
+    return favAlbumFirst
+
+def selectNextTrack(trackNum):
+    global tracks, player_mode, favouritesIndex
+    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+    # if Rand Tracks choose another track at random which is not in the history
+    if player_mode == 2:
+        trackNum = goToRandomTrack()                        
+    # if Album Favs go to the next track in the album, if at last track, go to the next favourite, if no more favourites change to Album Rand
+    elif player_mode == 0:
+        if favouritesIndex > len(albumFavourites):  # we ran out of favourites, so switch to Album Rand
+            favouritesIndex = 0
+            player_mode == 1
+        else:
+            trackNum = goToNextFavourite()
+    # if Album Rand go to the next track in the album, if at last track, go to a random album which is not in album history
+    if player_mode == 1:
+        (tracksRemaining, currentTrack ) = getAlbumTracksInfo(trackNum)
+        print("Tracks Remaining: " + str(tracksRemaining))
+        if tracksRemaining == 0: # finished playing album
+            trackNum = goToRandomAlbum()
+        else:
+            trackNum = ( (trackNum + 1) % len(tracks) )
+    return trackNum
+
+
 def displayMessage( messString ):
     global msg2, msg3, msg4
-    msg2 = messString
-    msg3 = ""
+    msg2 = ""
+    msg3 = messString
     msg4 = ""
     display()
     time.sleep(0.5)
 
-def writeDefaults():
-    # config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
-    global radio_stn, gapless, volume, Track_No, player_mode, auto_start, config_file
-    defaults = [radio_stn, gapless, volume, Track_No, player_mode, auto_start]
-    with open(config_file, 'w') as f:
-        for item in defaults:
-            f.write("%s\n" % item)
+def getAlbumNum(trackNum):
+    global albumList
+    ( artist, album, song ) = getArtistAlbumSongNames(trackNum)
+    uniqAlbum = album + " - " + artist
+    albumNum = albumList.index(uniqAlbum)
+    return albumNum
+    
+
+def addCurrentAlbumToFavs(trackNum):
+    global albumFavourites
+    albumNum = getAlbumNum(trackNum)
+    if albumNum not in albumFavourites:
+        albumFavourites.append(albumNum)
+        writeFavourites()
+        
+
+def removeCurrentAlbumToFavs(trackNum):
+    global albumFavourites
+    albumNum = getAlbumNum(trackNum)
+    if albumNum in albumFavourites:
+        indexToRemove = albumFavourites.index(albumNum)
+        albumFavourites.remove(indexToRemove) # ValueError: list.remove(x): x not in list
+        writeFavourites()
+
 
 
 
@@ -563,7 +639,7 @@ if len(tracks) > 0:
     if not os.path.exists (track) and usb_found > 0 and stop == 0:
         reload()
 
-# populate albumDictionary, artistDictionary, albumTuple, artistTuple
+# populate albumDictionary, artistDictionary, albumList, artistList
 loadTrackDictionaries()
 
 # wait for internet connection
@@ -625,19 +701,8 @@ try:
 except:
     pass
 
+Track_No = selectNextTrack(Track_No)
 
-# 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
-if player_mode == 0:
-    player_mode = 1   # Album Rand
-
-if player_mode == 1:   # Album Rand
-    # move Track_No to start of random album
-    Track_No = goToRandomAlbum()
-
-
-if player_mode == 2:   # Rand Tracks
-    # move Track_No to random track
-    Track_No = goToRandomTrack()
 
 
 while True:    
@@ -947,9 +1012,9 @@ while True:
                 time.sleep(0.5)
                 displayMessage( playerModeNames[player_mode] + "   ")
             timer1 = time.monotonic()
-            while buttonFAVMODE.is_pressed and time.monotonic() - timer1 < 2:
+            while buttonFAVMODE.is_pressed and time.monotonic() - timer1 < buttonHold:
                 pass
-            if time.monotonic() - timer1 < 1:
+            if time.monotonic() - timer1 < buttonHold:
                 ################
                 # Rotate through Modes  !!!
                 ##############
@@ -1209,6 +1274,7 @@ while True:
             except:
                 pass
         # stop playing if end of album, in album mode
+        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
 
         if currentTrack > remainTracks and player_mode != 2:
             status()
@@ -1300,6 +1366,13 @@ while True:
               display()
           audio = MP3(track)
           track_len = audio.info.length
+          # add track to history
+          if trackHistory:
+              trackHistoryLast = len(trackHistory) -1
+              if Track_No != trackHistory[trackHistoryLast]:
+                  trackHistory.append(Track_No)
+          else:
+              trackHistory.append(Track_No)
           p = subprocess.Popen(rpistr, shell=True, preexec_fn=os.setsid)
           poll = p.poll()
           while poll != None:
@@ -1433,22 +1506,7 @@ while True:
                 os.killpg(p.pid, SIGTERM)
                 # add current track number to history, if not already last item
                 if go == 1:
-                    
-                    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
-                    # if Rand Tracks choose another track at random which is not in the history
-                    if player_mode = 2:
-                        Track_No = goToRandomTrack()
-                        
-                    # if Album Favs go to the next track in the album, if at last track, go to the next favourite, if no more favourites change to Album Rand
-                    # if Album Rand go to the next track in the album, if at last track, go to a random album which is not in album history
-                    elif player_mode = 1 or player_mode = 2:
-                        (tracksRemaining, currentTrack ) = getAlbumTracksInfo(Track_No)
-                        if tracksRemaining == 0: # finished playing album
-                            Track_No = goToRandomAlbum()
-                        else:
-                            Track_No = ( (Track_No + 1) % len(tracks))
-                            
-
+                    Track_No = selectNextTrack(Track_No)                        
                 go = 0
 
 
@@ -1464,9 +1522,10 @@ while True:
                 Disp_on = 1
                 os.killpg(p.pid, SIGTERM)
                 if go == 1:
-                    Track_No -= 1
-                    if Track_No < 0:
-                        Track_No = len(tracks) + Track_No
+                    if trackHistory:
+                        trackHistoryLast = len(trackHistory) -1
+                        if len(trackHistory) > 0:
+                            Track_No = trackHistory.pop(trackHistoryLast)   # use last item in track history then remove it
                 go = 0
 
 
@@ -1512,10 +1571,14 @@ while True:
                     pass
                 if time.monotonic() - timer1 < buttonHold and len(tracks) > 0:
                     # PUSH
-                    pass  # add current album to favourites
+                    # add current album to favourites
+                    addCurrentAlbumToFavs(Track_No)
+                    displayMessage( "Album + to Favs")
                 else:
                     # HOLD
-                    pass  # remove current album from favourites
+                    # remove current album from favourites
+                    removeCurrentAlbumToFavs(Track_No)
+                    displayMessage( "Album - from Favs")
 
 
 
@@ -1523,11 +1586,7 @@ while True:
             poll = p.poll()
             
           if go == 1:
-            Track_No +=1
-          if Track_No < 0:
-            Track_No = len(tracks) + Track_No
-          elif Track_No > len(tracks) - 1:
-            Track_No = Track_No - len(tracks)
+            Track_No = selectNextTrack(Track_No)
         
 
 
