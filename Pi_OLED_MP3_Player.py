@@ -236,16 +236,25 @@ def display():
     disp.image(image)
     disp.display()
 
-display()
+def outputToDisplay(dispLine1,dispLine2,dispLine3,dispLine4):
+    global image,top,width,height,font
+    # Display image.
+    draw.rectangle((0,0,width,height), outline=0, fill=0)
+    draw.text((0, top + 0), dispLine1,  font=font, fill=255)
+    draw.text((0, top + 8), dispLine2,  font=font, fill=255)
+    draw.text((0, top + 16),dispLine3,  font=font, fill=255)
+    draw.text((0, top + 24),dispLine4,  font=font, fill=255)
+    disp.image(image)
+    disp.display()
+
+outputToDisplay("MP3 Player: v" + version, "", "", "")
 time.sleep(2)
 stop = 0
 def reload():
-  global tracks,x,top,msg1,msg2,Track_No,stop
+  global tracks,Track_No,stop
   if stop == 0:
     tracks  = []
-    msg1 = "Tracks: " + str(len(tracks))
-    msg2 = "Reloading tracks... "
-    display()
+    outputToDisplay("Tracks: " + str(len(tracks),"Reloading tracks... ", "", "")
     usb_tracks  = glob.glob("/media/" + h_user[0] + "/*/*/*/*.mp3")
     sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
     titles = [0,0,0,0,0,0,0]
@@ -264,14 +273,10 @@ def reload():
     with open('tracks.txt', 'w') as f:
         for item in tracks:
             f.write("%s\n" % item)
-    msg1 = ("Tracks: " + str(len(tracks)))
     Track_No = 0
-    writeDefaults()
-    display()
+    outputToDisplay("Tracks: " + str(len(tracks),"", "", "")
     if len(tracks) == 0:
-        msg1 = "Tracks: " + str(len(tracks))
-        msg2 = "Stopped Checking"
-        display()
+        outputToDisplay("Tracks: " + str(len(tracks), "Stopped Checking")
         stop = 1
     time.sleep(1)
 
@@ -445,24 +450,28 @@ def selectNextTrack(trackNum):
 
 
 def displayMessage( messString ):
-    global msg2, msg3, msg4
-    msg2 = ""
-    msg3 = messString
-    msg4 = ""
-    display()
+    outputToDisplay("", messString, "")
     time.sleep(0.5)
 
 def displayTrack(Track_Num, remainTracks):
-    global msg1, msg2, msg3, msg4, player_mode
-    msg2 = ""
-    msg3 = ""
-    msg4 = ""
+    global player_mode
     if player_mode == 2:
-        track_n = str(Track_Num + 1) + "     "
+        track_n = str(Track_Num + 1) + "     " 
     else:
         track_n = "1/" + str(remainTracks) + "       "
-    msg1 = "Play.." + str(track_n)[0:5]
-    display()  
+    track_n += playerStatus(player_mode)
+    outputToDisplay("Play.." + str(track_n)[0:5], "", "", "")
+
+def showTrackProgress(Track_No, played_pc):
+    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+    (dispLine2, dispLine3, dispLine4) = getSongDetails(Track_No)
+    if player_mode == 2:
+        track_n = str(Track_No + 1) + "     "
+    else:
+        track_n = str(currentTrack) + "/" + str(remainTracks)
+    dispLine1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
+    outputToDisplay(dispLine1, dispLine2, dispLine3, dispLine4)
+
 
 
 def getAlbumNum(trackNum):
@@ -494,17 +503,12 @@ def add_removeCurrentAlbumFavs(trackNum):
 
 
 def Set_Volume():
-    global mixername,m,msg1,msg2,msg3,msg4,MP3_Play,radio,radio_stn,volume,gapless
-    msg1 = "Set Volume.. " + str(volume)
-    msg2 = ""
-    msg3 = ""
-    msg4 = ""
+    global mixername,m,MP3_Play,radio,radio_stn,volume,gapless
     while buttonVOLUP.is_pressed:
         volume +=1
         volume = min(volume,100)
         m.setvolume(volume)
-        msg1 = "Set Volume.. " + str(volume)
-        display()
+        outputToDisplay("Set Volume.. " + str(volume), "", "", "")
         os.system("amixer -D pulse sset Master " + str(volume) + "%")
         if mixername == "DSP Program":
             os.system("amixer set 'Digital' " + str(volume + 107))
@@ -512,8 +516,7 @@ def Set_Volume():
         volume -=1
         volume = max(volume,0)
         m.setvolume(volume)
-        msg1 = "Set Volume.. " + str(volume)
-        display()
+        outputToDisplay("Set Volume.. " + str(volume), "", "", "")
         os.system("amixer -D pulse sset Master " + str(volume) + "%")
         if mixername == "DSP Program":
             os.system("amixer set 'Digital' " + str(volume + 107))
@@ -538,6 +541,28 @@ def status():
         txt +="S"
     else:
         txt +=" "
+
+def playerStatus(player_mode):
+    global gapless,sleep_timer
+    txt = " "
+    if player_mode == 0:   # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+        txt +="FV"
+    elif player_mode == 1:
+        txt +="AR"
+    elif player_mode == 2:
+        txt +="RT"
+    else:
+        txt +=" "
+    if gapless == 1:
+        txt +="G"
+    else:
+        txt +=" "
+    if sleep_timer > 0:
+        txt +="S"
+    else:
+        txt +=" "
+    return txt
+
 
 # read previous usb free space of upto 4 usb devices, to see if usb data has changed
 if not os.path.exists('freedisk.txt'):
@@ -584,25 +609,19 @@ else:
              tracks.append(line.strip())
              line = file.readline()
 
+outputToDisplay("Tracks: " + str(len(tracks), "", "", "")
 
-msg1 = "Tracks: " + str(len(tracks))
-display()
 
 # check if USB mounted and find USB storage
 if use_USB == 1:
     start = time.monotonic()
-    msg1 = ("Checking for USB")
-    display()
+    outputToDisplay("Checking for USB", "", "", "")
     while time.monotonic() - start < usb_timer:
         usb = glob.glob("/media/" +  h_user[0] + "/*")
         usb_found = len(usb)
-        msg2 = "Found: " + str(usb_found) + " USBs"
-        msg3 = str(int(usb_timer -(time.monotonic() - start)))
-        display()
+        outputToDisplay("Checking for USB", "Found: " + str(usb_found) + " USBs", str(int(usb_timer -(time.monotonic() - start))), "")
         time.sleep(1)
-    msg2 = ""
-    msg3 = ""
-    display()
+    outputToDisplay("Checking for USB", "", "", "")
     if usb_found > 0:
         # check if usb contents have changed, if so then reload tracks
         free = ["0","0","0","0"]
@@ -620,14 +639,12 @@ if use_USB == 1:
         with open("freedisk.txt", "w") as f:
             for item in freedisk:
                 f.write("%s\n" % item)
-        msg2 = "No USB Found !!"
-        display()
+        outputToDisplay("Checking for USB", "No USB Found !!", "", "")
         sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
         time.sleep(2)
         if len(sd_tracks) != len(tracks):
             reloading = 1
-        msg2 = ""
-        display()
+        outputToDisplay("Checking for USB", "", "", "")
 
 if reloading == 1 and stop == 0:
     reload()
@@ -662,13 +679,11 @@ loadTrackDictionaries()
 
 # wait for internet connection
 if radio == 1:
-    msg1 = "Waiting for Radio..."
-    display()
+    outputToDisplay("Waiting for Radio...", "", "", "")
     time.sleep(10)
     q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] ,shell=False)
-    msg1 = (Radio_Stns[radio_stn])
-    msg2 = ""
-    display()
+    outputToDisplay((Radio_Stns[radio_stn]), "", "", "")
+    
 else:
     (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
     stimer = getRemainingAlbumTime(Track_No)    
@@ -761,7 +776,7 @@ while True:
                 msg1 = "Play: " + str(track_n)[0:5]  
             elif xt == 2:
                 status()
-                msg1 = "Status...  "  +  txt
+                msg1 = "Status...  "  +  playerStatus(player_mode)
             elif xt == 3 and show_clock == 1 and synced == 1:
                 now = datetime.datetime.now()
                 clock = now.strftime("%H:%M:%S")
@@ -1133,12 +1148,9 @@ while True:
                 pass
         # DISPLAY OFF timer
         if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
-            msg1 = ""
-            msg2 = ""
-            msg3 = ""
-            msg4 = ""
+            outputToDisplay("", "", "", "")
             Disp_on = 0
-            display()
+
             
         # sleep_timer timer
         if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
@@ -1148,11 +1160,9 @@ while True:
             Disp_on = 1
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg2 = "SHUTDOWN in " + str(t)
-                    display()
+                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    msg2 = "STOPPING in " + str(t)
-                    display()
+                    outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -1161,15 +1171,11 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg1 = "SHUTTING DOWN..."
-                    display()
+                    outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    msg1 = "STOPPING........"
-                display()
-                msg2 = ""
+                    outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(1)
-                msg1 = ""
-                display()
+                outputToDisplay("", "", "", "")
                 q.kill()
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
@@ -1186,9 +1192,13 @@ while True:
         time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
         msg1 = Radio_Stns[radio_stn]
         if sleep_timer > 0:
-            msg3 = "Shutdown: " + str(time_left) + "mins"
+            shutdownMsg = "Shutdown: " + str(time_left) + "mins"
+        else:
+            shutdownMsg = ""
         if show_clock == 1 and synced == 1:
-            msg2 = "      " + clock
+            outputToDisplay("", "      " + clock, shutdownMsg, "")
+        else:
+            outputToDisplay("", "", shutdownMsg, "")
         t = ""
         for r in range (0,random.randint(0,10)):
             t += " "
@@ -1200,19 +1210,14 @@ while True:
                 if sleep_timer > 0:
                     clock = clock + " " + str(time_left)
                 vp = random.randint(0,3)
-                msg1 = ""
-                msg2 = ""
-                msg3 = ""
-                msg4 = ""
                 if vp == 0:
-                    msg1 = clock
+                    outputToDisplay(clock, "", "", "")
                 elif vp == 1:
-                    msg2 = clock
+                    outputToDisplay("", clock, "", "")
                 elif vp == 2:
-                    msg3 = clock
+                    outputToDisplay("", "", clock, "")
                 elif vp == 3:
-                    msg4 = clock
-                display()
+                    outputToDisplay("", "", "", clock)
                 old_secs = secs
             
          # check for VOLDN  key
@@ -1306,14 +1311,14 @@ while True:
             except:
                 pass
         # stop playing if end of album, in album mode
-        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+        #(remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
 
-        if currentTrack > remainTracks and player_mode != 2:
-            status()
-            msg1 = "Play.."
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            display()
-            MP3_Play = 0
+        #if currentTrack > remainTracks and player_mode != 2:
+        #    status()
+        #    msg1 = "Play.."
+        #    ( msg2, msg3, msg4) = getSongDetails(Track_No)
+        #   display()
+        #   MP3_Play = 0
             
         # sleep_timer timer
         if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
@@ -1323,15 +1328,9 @@ while True:
             t = 30
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg2 = "SHUTDOWN in " + str(t)
-                    msg3 = ""
-                    msg4 = ""
-                    display()
+                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    msg2 = "STOPPING in " + str(t)
-                    msg3 = ""
-                    msg4 = ""
-                    display()
+                    outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -1340,18 +1339,13 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg1 = "SHUTTING DOWN..."
+                    outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    msg1 = "STOPPING........"
+                    outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(0.05)
-                msg2 = ""
-                msg3 = ""
-                msg4 = ""
-                display()
                 time.sleep(3)
                 Disp_on = 0
-                msg1 = ""
-                display()
+                outputToDisplay("", "", "", "")
                 poll = p.poll()
                 if poll == None:
                     os.killpg(p.pid, SIGTERM)
@@ -1361,9 +1355,7 @@ while True:
                 stopped = 1
                 MP3_Play = 0
             else:
-                status()
-                msg1 = "Play.." + str(track_n)[0:5] + txt
-                display()
+                outputToDisplay("Play.." + str(track_n)[0:5] + playerStatus(player_mode), "", "", "")
                 time.sleep(0.05)
                 Disp_start = time.monotonic()
             poll = p.poll()
@@ -1384,19 +1376,9 @@ while True:
         # play selected track
         if MP3_Play == 1 and len(tracks) > 0:
             track = getTrack(Track_No)
-            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if player_mode == 2:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = str(currentTrack) + "/" + str(remainTracks)
-            if player_mode == 2:
-                msg1 = "Track:" + str(track_n)[0:5] + "   0%"
-            else:
-                msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
             rpistr = "mplayer " + " -quiet " +  '"' + track + '"'
             if Disp_on == 1:
-                display()
+                showTrackProgress(Track_No, played_pc)
             audio = MP3(track)
             track_len = audio.info.length
             # add track to history
@@ -1433,19 +1415,14 @@ while True:
                         clock += " " + str(time_left)
                     if secs != old_secs2 :
                         vp = random.randint(0,3)
-                        msg1 = ""
-                        msg2 = ""
-                        msg3 = ""
-                        msg4 = ""
                         if vp == 0:
-                            msg1 = clock
+                            outputToDisplay(clock, "", "", "")
                         elif vp == 1:
-                            msg2 = clock
+                            outputToDisplay("", clock, "", "")
                         elif vp == 2:
-                            msg3 = clock
+                            outputToDisplay("", "", clock, "")
                         elif vp == 3:
-                            msg4 = clock
-                        display()
+                            outputToDisplay("", "", "", clock)
                         old_secs2 = secs
                   
                 time.sleep(0.2)
@@ -1455,12 +1432,9 @@ while True:
   
                 # DISPLAY OFF timer
                 if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
-                    msg1 = ""
-                    msg2 = ""
-                    msg3 = ""
-                    msg4 = ""
+                    outputToDisplay("", "", "", "")
                     Disp_on = 0
-                    display()
+
              
                 # display titles, status etc
                 if time.monotonic() - timer1 > 2 and Disp_on == 1:
@@ -1475,7 +1449,7 @@ while True:
                         msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
                     elif xt == 2:
                         status()
-                        msg1 = "Status...  " +  txt
+                        msg1 = "Status...  " +  playerStatus(player_mode)
                     elif xt == 4 and sleep_timer != 0:
                         time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
                         msg1 = "SLEEP: " + str(time_left) + " mins"
@@ -1511,15 +1485,9 @@ while True:
                     Disp_start = time.monotonic()
                     timer1 = time.monotonic()
                     os.killpg(p.pid, SIGTERM)
-                    msg1 = "Track Stopped"
-                    display()
+                    outputToDisplay("Track Stopped", "", "", "")
                     time.sleep(2)
-                    status()
-                    msg1 = "Play.." + str(track_n)[0:5] + txt
-                    msg2 = ""
-                    msg3 = ""
-                    msg4 = ""
-                    display()
+                    displayTrack(Track_No, remainTracks)
                     goToNextTrack = 0
                     MP3_Play = 0
                     writeDefaults()
@@ -1581,7 +1549,6 @@ while True:
                     if Disp_on == 0:
                         Disp_on = 1
                         Disp_start = time.monotonic()
-                        status()
                         displayTrack(Track_No, remainTracks)
                         time.sleep(0.5)
                     Set_Volume()
@@ -1596,9 +1563,7 @@ while True:
                     if Disp_on == 0:
                         Disp_start = time.monotonic()
                         Disp_on = 1
-                        status()
-                        msg1 = "Track.." + str(track_n)[0:5] + txt
-                        display()
+                        displayTrack(Track_No, remainTracks)
                         time.sleep(1)
                     Disp_on = 1
                     timer1 = time.monotonic()
