@@ -206,12 +206,10 @@ atimer      = time.monotonic()
 played_pc   = 0
 synced      = 0
 reloading   = 0
-msg1        = "MP3 Player: v" + version
-msg2        = ""
-msg3        = ""
-msg4        = ""
 abort_sd    = 1
 usb_found   = 0
+
+
 
 # find username
 h_user  = []
@@ -225,16 +223,6 @@ def getTrack(trackNum):
     trackData = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
     return trackData
 
-def display():
-    global image,top,msg1,msg2,msg3,msg4,width,height,font
-    # Display image.
-    draw.rectangle((0,0,width,height), outline=0, fill=0)
-    draw.text((0, top + 0), msg1,  font=font, fill=255)
-    draw.text((0, top + 8), msg2,  font=font, fill=255)
-    draw.text((0, top + 16),msg3,  font=font, fill=255)
-    draw.text((0, top + 24),msg4,  font=font, fill=255)
-    disp.image(image)
-    disp.display()
 
 def outputToDisplay(dispLine1,dispLine2,dispLine3,dispLine4):
     global image,top,width,height,font
@@ -462,14 +450,18 @@ def displayTrack(Track_Num, remainTracks):
     track_n += playerStatus(player_mode)
     outputToDisplay("Play.." + str(track_n)[0:5], "", "", "")
 
-def showTrackProgress(Track_No, played_pc):
-    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-    (dispLine2, dispLine3, dispLine4) = getSongDetails(Track_No)
+def showTrackProgress(trackNum, played_pc):
+    (remainTracks, currentTrack) = getAlbumTracksInfo(trackNum)
+    (dispLine2, dispLine3, dispLine4) = getSongDetails(trackNum)
     if player_mode == 2:
-        track_n = str(Track_No + 1) + "     "
+        track_n = str(trackNum + 1) + "     "
     else:
         track_n = str(currentTrack) + "/" + str(remainTracks)
-    dispLine1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
+    if played_pc != -1:
+        progress = str(played_pc)[-2:] + "% "
+    else:
+        progress = ""
+    dispLine1 = "Track:" + str(track_n)[0:5] + "  " + progress + playerStatus(player_mode)
     outputToDisplay(dispLine1, dispLine2, dispLine3, dispLine4)
 
 
@@ -692,12 +684,7 @@ else:
 
 
 
-if player_mode == 2:   # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
-    track_n = str(Track_No + 1) + "     "
-else:
-    track_n = "1/" + str(remainTracks) + "       "
-
-status()
+showTrackProgress(Track_No, -1)
 
 if gapless == 0:
     gap = 0
@@ -766,29 +753,22 @@ while True:
             
         # display Artist / Album / Track names
         if time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0:
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
             timer1 = time.monotonic()
             if xt < 2:
-                if player_mode == 2:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Play: " + str(track_n)[0:5]  
+                showTrackProgress(Track_No, -1) 
             elif xt == 2:
-                status()
-                msg1 = "Status...  "  +  playerStatus(player_mode)
+                outputToDisplay("Status...  "  +  playerStatus(player_mode), "", "", "")
             elif xt == 3 and show_clock == 1 and synced == 1:
                 now = datetime.datetime.now()
                 clock = now.strftime("%H:%M:%S")
-                msg1 = clock
+                outputToDisplay(clock, "", "", "")
             elif xt == 4:
-                msg1 = "Volume: " + str(volume)
+                outputToDisplay("Volume: " + str(volume), "", "", "")
             elif xt == 5 and sleep_timer != 0:
                 time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                msg1 = "SLEEP: " + str(time_left) + " mins"
+                outputToDisplay("SLEEP: " + str(time_left) + " mins", "", "", "")
             else:
                 xt +=1
-            display()
             xt +=1
             if xt > 5:
                 xt = 0
@@ -803,30 +783,22 @@ while True:
                 t += " "
             clock = t + clock
             if secs != old_secs2 :
-              vp = random.randint(0,3)
-              msg1 = ""
-              msg2 = ""
-              msg3 = ""
-              msg4 = ""
-              if vp == 0:
-                msg1 = clock
-              elif vp == 1:
-                msg2 = clock
-              elif vp == 2:
-                msg3 = clock
-              elif vp == 3:
-                msg4 = clock
-              display()
-              old_secs2 = secs
+                vp = random.randint(0,3)
+                if vp == 0:
+                    outputToDisplay(clock, "", "", "")
+                elif vp == 1:
+                    outputToDisplay("", clock, "", "")
+                elif vp == 2:
+                    outputToDisplay("", "", clock, "")
+                elif vp == 3:
+                    outputToDisplay("", "", "", clock)
+                old_secs2 = secs
 
         # DISPLAY OFF timer
         if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
-            msg1 = ""
-            msg2 = ""
-            msg3 = ""
-            msg4 = ""
+            outputToDisplay("", "", "", "")
             Disp_on = 0
-            display()
+
             
         # sleep_timer timer
         if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
@@ -835,10 +807,9 @@ while True:
             t = 30
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg2 = "SHUTDOWN in " + str(t)
+                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    msg2 = "STOPPING in " + str(t)
-                display()
+                    outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed or buttonPLAY.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -847,27 +818,16 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    msg1 = "SHUTTING DOWN..."
+                    outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    msg1 = "STOPPING........"
-                msg2 = ""
-                msg3 = ""
-                msg4 = ""
-                display()
+                    outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(3)
-                msg1 = ""
-                display()
+                outputToDisplay("", "", "", "")
                 sleep_timer = 0 
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
             else:
-                status()
-                if player_mode == 2:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Play.." + str(track_n)[0:5]
-                display()
+                showTrackProgress(Track_No, -1)
             Disp_start = time.monotonic()
 
 
@@ -893,13 +853,9 @@ while True:
                 ## PUSH
                 # player mode is radio
                 if player_mode == 3:
-                    msg2 = ""
-                    msg3 = ""
-                    msg4 = ""
                     q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
                     time.sleep(0.05)
-                    msg1 = (Radio_Stns[radio_stn])
-                    display()
+                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
                     rs = Radio_Stns[radio_stn]
                     while buttonPLAY.is_pressed:
                         pass
@@ -930,14 +886,7 @@ while True:
         if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
-            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if player_mode == 2:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play:" + str(track_n)[0:5] 
-            display()
+            showTrackProgress(Track_No, -1)
             timer1 = time.monotonic()
             album = 1
             while buttonNEXT.is_pressed and time.monotonic() - timer1 < buttonHold:
@@ -948,14 +897,7 @@ while True:
             else:
                 # HOLD
                 Track_No = goToNextArtist(Track_No)
-            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if player_mode == 2:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play:" + str(track_n)[0:5] 
-            display()
+            showTrackProgress(Track_No, -1)
             time.sleep(0.5)
             writeDefaults()
             Disp_start = time.monotonic()
@@ -971,14 +913,7 @@ while True:
             Disp_on = 1
             time.sleep(0.2)
             Track_No = goToPrevAlbum(Track_No)
-            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if player_mode == 2:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play:" + str(track_n)[0:5] 
-            display()
+            showTrackProgress(Track_No, -1)
             timer1 = time.monotonic()
             album = 1
             while buttonPREV.is_pressed and time.monotonic() - timer1 < buttonHold:
@@ -989,14 +924,7 @@ while True:
             else:
                 # HOLD
                 Track_No = goToPrevArtist(Track_No)
-            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-            ( msg2, msg3, msg4) = getSongDetails(Track_No)
-            if player_mode == 2:
-                track_n = str(Track_No + 1) + "     "
-            else:
-                track_n = "1/" + str(remainTracks) + "       "
-            msg1 = "Play:" + str(track_n)[0:5] 
-            display()
+            showTrackProgress(Track_No, -1)
             time.sleep(0.5)
             writeDefaults()
             Disp_start = time.monotonic()
@@ -1014,12 +942,7 @@ while True:
             if Disp_on == 0:
                 Disp_on = 1
                 Disp_start = time.monotonic()
-                status()
-                if player_mode == 2:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Play.." + str(track_n)[0:5]
+                showTrackProgress(Track_No, -1)
                 time.sleep(0.5)
             Set_Volume()
             time.sleep(0.5)
@@ -1036,11 +959,7 @@ while True:
                 Disp_on = 1
                 Disp_start = time.monotonic()
                 status()
-                if player_mode == 2:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Play.." + str(track_n)[0:5]
+                showTrackProgress(Track_No, -1)
                 time.sleep(0.5)
                 displayMessage( playerModeNames[player_mode] + "   ")
             timer1 = time.monotonic()
@@ -1072,8 +991,7 @@ while True:
                     radio = 1
                     MP3_play = 0
                     q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
-                    msg1 = (Radio_Stns[radio_stn])
-                    display()
+                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
                     rs = Radio_Stns[radio_stn] + "               "[0:19]
                     writeDefaults()
                 # SHUTDOWN IF PRESSED FOR 10 SECONDS
@@ -1081,44 +999,27 @@ while True:
                 if sleep_timer > 7200:
                     sleep_timer = 0
                 sleep_timer_start = time.monotonic()
-                msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                msg2 = "HOLD for 10 to SHUTDOWN "
-                msg3 = ""
-                msg4 = ""
-                display()
+                outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "HOLD for 10 to SHUTDOWN ", "", "")
                 time.sleep(0.25)
                 while buttonFAVMODE.is_pressed:
                     sleep_timer +=900
                     if sleep_timer > 7200:
                          sleep_timer = 0
                     sleep_timer_start = time.monotonic()
-                    msg1 = "Set SLEEP.. " + str(int(sleep_timer/60))
-                    display()
+                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60), "", "", "")
                     time.sleep(1)
                     if time.monotonic() - timer1 > 5:
-                        msg2 = "SHUTDOWN in " + str(10-int(time.monotonic() - timer1))
-                        display()
+                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1), "", "")
                     if time.monotonic() - timer1 > 10:
                         # shutdown if pressed for 10 seconds
-                        msg1 = "SHUTTING DOWN..."
-                        msg2 = ""
-                        msg3 = ""
-                        msg4 = ""
-                        display()
+                        outputToDisplay("SHUTTING DOWN...", "", "", "")
                         time.sleep(2)
-                        msg1 = ""
-                        display()
+                        outputToDisplay("", "", "", "")
                         MP3_Play = 0
                         radio = 0
                         time.sleep(1)
                         os.system("sudo shutdown -h now")
-                status()
-                if player_mode == 2:
-                    track_n = str(Track_No + 1) + "     "
-                else:
-                    track_n = "1/" + str(remainTracks) + "       "
-                msg1 = "Play.." + str(track_n)[0:5]
-                display()
+                showTrackProgress(Track_No, -1)
                 timer1 = time.monotonic()
                 xt = 2
             
@@ -1189,22 +1090,20 @@ while True:
         now = datetime.datetime.now()
         clock = now.strftime("%H:%M:%S")
         secs = now.strftime("%S")
-        time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-        msg1 = Radio_Stns[radio_stn]
+        time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)]
         if sleep_timer > 0:
             shutdownMsg = "Shutdown: " + str(time_left) + "mins"
         else:
             shutdownMsg = ""
-        if show_clock == 1 and synced == 1:
-            outputToDisplay("", "      " + clock, shutdownMsg, "")
-        else:
-            outputToDisplay("", "", shutdownMsg, "")
+        if Disp_on == 1:
+            if show_clock == 1 and synced == 1:
+                outputToDisplay("", "      " + clock, shutdownMsg, "")
+            else:
+                outputToDisplay("", "", shutdownMsg, "")
         t = ""
         for r in range (0,random.randint(0,10)):
             t += " "
         clock = t + clock
-        if Disp_on == 1:
-            display()
         if show_clock == 1 and Disp_on == 0 and synced == 1:
             if secs != old_secs:
                 if sleep_timer > 0:
@@ -1224,7 +1123,7 @@ while True:
         if  buttonVOLDN.is_pressed :
             Disp_on = 1
             Disp_start = time.monotonic()
-            display()
+            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             Set_Volume()
             time.sleep(0.5)
             timer1 = time.monotonic()
@@ -1233,7 +1132,7 @@ while True:
         if  buttonVOLUP.is_pressed:
             Disp_on = 1
             Disp_start = time.monotonic()
-            display()
+            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             Set_Volume()
             time.sleep(0.5)
             timer1 = time.monotonic()
@@ -1247,8 +1146,7 @@ while True:
                radio_stn = len(Radio_Stns) - 2
             q.kill()
             q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-            msg1 = (Radio_Stns[radio_stn])
-            display()
+            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             rs = Radio_Stns[radio_stn] + "               "[0:19]
             writeDefaults()
             timer1 = time.monotonic()
@@ -1261,9 +1159,8 @@ while True:
             if radio_stn > len(Radio_Stns)- 2:
                radio_stn = 0
             q.kill()
-            q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-            msg1 = (Radio_Stns[radio_stn])
-            display()
+            q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False))
+            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             rs = Radio_Stns[radio_stn] + "               "[0:19]
             writeDefaults()
             timer1 = time.monotonic()
@@ -1275,11 +1172,7 @@ while True:
             Disp_start = time.monotonic()
             q.kill()
             radio = 0
-            if len(tracks) > 0:
-                msg1 = "Play.." + str(track_n)[0:5] + "   S"
-            else:
-                msg1 = "Radio Stopped      "
-            display()
+            outputToDisplay("Radio Stopped      ", "", "", "")
             writeDefaults()
             time.sleep(2)
             
@@ -1314,10 +1207,6 @@ while True:
         #(remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
 
         #if currentTrack > remainTracks and player_mode != 2:
-        #    status()
-        #    msg1 = "Play.."
-        #    ( msg2, msg3, msg4) = getSongDetails(Track_No)
-        #   display()
         #   MP3_Play = 0
             
         # sleep_timer timer
@@ -1438,25 +1327,19 @@ while True:
              
                 # display titles, status etc
                 if time.monotonic() - timer1 > 2 and Disp_on == 1:
-                    ( msg2, msg3, msg4) = getSongDetails(Track_No)
                     timer1    = time.monotonic()
                     played_pc =  "     " + str(played_pc)
-                    if player_mode == 2:
-                        track_n = str(Track_No + 1) + "     "
-                    else:
-                        track_n = str(currentTrack) + "/" + str(remainTracks) + "       "
                     if xt < 2:
-                        msg1 = "Track:" + str(track_n)[0:5] + "  " + str(played_pc)[-2:] + "%"
+                        showTrackProgress(Track_No, played_pc)
                     elif xt == 2:
-                        status()
-                        msg1 = "Status...  " +  playerStatus(player_mode)
+                        outputToDisplay("Status...  " +  playerStatus(player_mode), "", "", "")
                     elif xt == 4 and sleep_timer != 0:
                         time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                        msg1 = "SLEEP: " + str(time_left) + " mins"
+                        outputToDisplay("SLEEP: " + str(time_left) + " mins", "", "", "")
                     elif xt == 5 and show_clock == 1 and synced == 1:
                         now = datetime.datetime.now()
                         clock = now.strftime("%H:%M:%S")
-                        msg1 = clock
+                        outputToDisplay(clock, "", "", "")
                     elif xt == 3:
                         pmin = int(played/60)
                         psec = int(played - (pmin * 60))
@@ -1468,8 +1351,7 @@ while True:
                         lsec2 = str(lsec)
                         if lsec < 10:
                             lsec2 = "0" + lsec2
-                        msg1 = " " + str(pmin) + ":" + str(psec2) + " of " + str(lmin) + ":" + str(lsec2)
-                    display()
+                        outputToDisplay(" " + str(pmin) + ":" + str(psec2) + " of " + str(lmin) + ":" + str(lsec2), "", "", "")
                     xt +=1
                     if xt > 5:
                         xt = 0
