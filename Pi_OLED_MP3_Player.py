@@ -242,7 +242,7 @@ def reload():
   global tracks,Track_No,stop
   if stop == 0:
     tracks  = []
-    outputToDisplay("Tracks: " + str(len(tracks),"Reloading tracks... ", "", "")
+    outputToDisplay("Tracks: " + str(len(tracks)),"Reloading tracks... ", "", "")
     usb_tracks  = glob.glob("/media/" + h_user[0] + "/*/*/*/*.mp3")
     sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
     titles = [0,0,0,0,0,0,0]
@@ -262,9 +262,9 @@ def reload():
         for item in tracks:
             f.write("%s\n" % item)
     Track_No = 0
-    outputToDisplay("Tracks: " + str(len(tracks),"", "", "")
+    outputToDisplay("Tracks: " + str(len(tracks)),"", "", "")
     if len(tracks) == 0:
-        outputToDisplay("Tracks: " + str(len(tracks), "Stopped Checking")
+        outputToDisplay("Tracks: " + str(len(tracks)), "Stopped Checking")
         stop = 1
     time.sleep(1)
 
@@ -417,26 +417,68 @@ def selectNextTrack(trackNum):
     global tracks, player_mode, favouritesIndex
     # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
     # if Rand Tracks choose another track at random which is not in the history
+    print("NEXT Player Mode: " + str(player_mode))
+    print("NEXT Supplied Track Num: " + str(trackNum))
     if player_mode == 2:
         trackNum = goToRandomTrack()                        
     # if Album Favs go to the next track in the album, if at last track, go to the next favourite, if no more favourites change to Album Rand
     elif player_mode == 0:
         if len(albumFavourites) == 0 or favouritesIndex > len(albumFavourites):  # we ran out of favourites, so switch to Album Rand
             favouritesIndex = 0
-            player_mode == 1
+            player_mode = 1
         else:
-            trackNum = goToNextFavourite()
+            (tracksRemaining, currentTrack ) = getAlbumTracksInfo(trackNum)
+            print("P0 Tracks Remaining: " + str(tracksRemaining))
+            if tracksRemaining == 0: # finished playing album
+                trackNum = goToNextFavourite()
+            else:
+                trackNum = ( (trackNum + 1) % len(tracks) )
     # if Album Rand go to the next track in the album, if at last track, go to a random album which is not in album history
     if player_mode == 1:
         (tracksRemaining, currentTrack ) = getAlbumTracksInfo(trackNum)
-        print("Tracks Remaining: " + str(tracksRemaining))
+        print("P1 Tracks Remaining: " + str(tracksRemaining))
         if tracksRemaining == 0: # finished playing album
             trackNum = goToRandomAlbum()
         else:
             trackNum = ( (trackNum + 1) % len(tracks) )
+    print("NEXT New Track Num: " + str(trackNum))
     return trackNum
 
+def addToTrackHistory(trackNum):
+    global trackHistory
+    print("Starting Track History:")
+    print(trackHistory)
+    if trackHistory:
+        trackHistoryLast = len(trackHistory) -1
+        if trackNum != trackHistory[trackHistoryLast]:
+            trackHistory.append(trackNum)
+    else:
+        trackHistory.append(trackNum)
+    print("New Track History:")
+    print(trackHistory)
 
+def selectPrevTrack(trackNum):
+    global trackHistory, player_mode
+    print("PREV Player Mode: " + str(player_mode))
+    print("PREV Supplied Track Num: " + str(trackNum))
+    # use and remove the penultimate track from history
+    if trackHistory:
+        trackHistoryLast = len(trackHistory) -1
+        trackNum = trackHistory.pop(trackHistoryLast) # ignore the final entry since that will be the current track
+        trackHistoryLast = len(trackHistory) -1
+        if len(trackHistory) > 0:
+            trackNum = trackHistory.pop(trackHistoryLast)   # use last item in track history then remove it
+            print("PREV New Track Num: " + str(trackNum))
+            return trackNum
+    # if no track history left, and in an album mode go to start of current album
+    if player_mode < 3:
+        ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
+        print("PREV New Track Num: " + str(trackNum))
+        return currentAlbumFirst
+        
+        
+
+                            
 
 
 def showTrackProgress(trackNum, playLabel, played_pc):    # ignore played_pc if = -1
@@ -575,7 +617,7 @@ else:
              tracks.append(line.strip())
              line = file.readline()
 
-outputToDisplay("Tracks: " + str(len(tracks), "", "", "")
+outputToDisplay("Tracks: " + str(len(tracks)), "", "", "")
 
 
 # check if USB mounted and find USB storage
@@ -731,7 +773,7 @@ while True:
             if xt < 2:
                 showTrackProgress(Track_No, "STOP", -1) 
             elif xt == 2:
-                outputToDisplay("Status...  "  +  playerStatus(player_mode), "", "", "")
+                outputToDisplay("", "", "", "Status...  "  +  playerStatus(player_mode))
             elif xt == 3 and show_clock == 1 and synced == 1:
                 now = datetime.datetime.now()
                 clock = now.strftime("%H:%M:%S")
@@ -740,7 +782,7 @@ while True:
                 outputToDisplay("Volume: " + str(volume), "", "", "")
             elif xt == 5 and sleep_timer != 0:
                 time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                outputToDisplay("SLEEP: " + str(time_left) + " mins", "", "", "")
+                outputToDisplay("", "", "","SLEEP: " + str(time_left) + " mins")
             else:
                 xt +=1
             xt +=1
@@ -979,10 +1021,10 @@ while True:
                     if sleep_timer > 7200:
                          sleep_timer = 0
                     sleep_timer_start = time.monotonic()
-                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60), "", "", "")
+                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "", "", "")
                     time.sleep(1)
                     if time.monotonic() - timer1 > 5:
-                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1), "", "")
+                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1)), "", "")
                     if time.monotonic() - timer1 > 10:
                         # shutdown if pressed for 10 seconds
                         outputToDisplay("SHUTTING DOWN...", "", "", "")
@@ -992,7 +1034,7 @@ while True:
                         radio = 0
                         time.sleep(1)
                         os.system("sudo shutdown -h now")
-                showTrackProgress(Track_No, -1)
+                showTrackProgress(Track_No, "STOP", -1)
                 timer1 = time.monotonic()
                 xt = 2
             
@@ -1063,7 +1105,7 @@ while True:
         now = datetime.datetime.now()
         clock = now.strftime("%H:%M:%S")
         secs = now.strftime("%S")
-        time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)]
+        time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
         if sleep_timer > 0:
             shutdownMsg = "Shutdown: " + str(time_left) + "mins"
         else:
@@ -1132,7 +1174,7 @@ while True:
             if radio_stn > len(Radio_Stns)- 2:
                radio_stn = 0
             q.kill()
-            q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False))
+            q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
             outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             rs = Radio_Stns[radio_stn] + "               "[0:19]
             writeDefaults()
@@ -1244,12 +1286,7 @@ while True:
             audio = MP3(track)
             track_len = audio.info.length
             # add track to history
-            if trackHistory:
-                trackHistoryLast = len(trackHistory) -1
-                if Track_No != trackHistory[trackHistoryLast]:
-                    trackHistory.append(Track_No)
-            else:
-                trackHistory.append(Track_No)
+            addToTrackHistory(Track_No)
             p = subprocess.Popen(rpistr, shell=True, preexec_fn=os.setsid)
             poll = p.poll()
             while poll != None:
@@ -1305,10 +1342,10 @@ while True:
                     if xt < 2:
                         showTrackProgress(Track_No, "PLAY", played_pc)
                     elif xt == 2:
-                        outputToDisplay("Status...  " +  playerStatus(player_mode), "", "", "")
+                        outputToDisplay("", "", "", "Status...  " +  playerStatus(player_mode))
                     elif xt == 4 and sleep_timer != 0:
                         time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                        outputToDisplay("SLEEP: " + str(time_left) + " mins", "", "", "")
+                        outputToDisplay("", "", "","SLEEP: " + str(time_left) + " mins")
                     elif xt == 5 and show_clock == 1 and synced == 1:
                         now = datetime.datetime.now()
                         clock = now.strftime("%H:%M:%S")
@@ -1324,7 +1361,7 @@ while True:
                         lsec2 = str(lsec)
                         if lsec < 10:
                             lsec2 = "0" + lsec2
-                        outputToDisplay(" " + str(pmin) + ":" + str(psec2) + " of " + str(lmin) + ":" + str(lsec2), "", "", "")
+                        outputToDisplay("", "", ""," " + str(pmin) + ":" + str(psec2) + " of " + str(lmin) + ":" + str(lsec2))
                     xt +=1
                     if xt > 5:
                         xt = 0
@@ -1379,13 +1416,11 @@ while True:
                     Disp_start = time.monotonic()
                     Disp_on = 1
                     os.killpg(p.pid, SIGTERM)
-                    if trackHistory:
-                        trackHistoryLast = len(trackHistory) -1
-                        if len(trackHistory) > 0:
-                            Track_No = trackHistory.pop(trackHistoryLast)   # use last item in track history then remove it
-                            showTrackProgress(Track_No, "PLAY", -1)
-                            time.sleep(0.5)
-                            goToNextTrack = 0
+                    Track_No = selectPrevTrack(Track_No)
+                    showTrackProgress(Track_No, "PLAY", -1)
+                    time.sleep(0.5)
+                    goToNextTrack = 0
+
   
   
   
