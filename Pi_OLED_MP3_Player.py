@@ -437,20 +437,10 @@ def selectNextTrack(trackNum):
     return trackNum
 
 
-def displayMessage( messString ):
-    outputToDisplay("", messString, "")
-    time.sleep(0.5)
 
-def displayTrack(Track_Num, remainTracks):
+
+def showTrackProgress(trackNum, playLabel, played_pc):    # ignore played_pc if = -1
     global player_mode
-    if player_mode == 2:
-        track_n = str(Track_Num + 1) + "     " 
-    else:
-        track_n = "1/" + str(remainTracks) + "       "
-    track_n += playerStatus(player_mode)
-    outputToDisplay("Play.." + str(track_n)[0:5], "", "", "")
-
-def showTrackProgress(trackNum, played_pc):
     (remainTracks, currentTrack) = getAlbumTracksInfo(trackNum)
     (dispLine2, dispLine3, dispLine4) = getSongDetails(trackNum)
     if player_mode == 2:
@@ -461,7 +451,7 @@ def showTrackProgress(trackNum, played_pc):
         progress = str(played_pc)[-2:] + "% "
     else:
         progress = ""
-    dispLine1 = "Track:" + str(track_n)[0:5] + "  " + progress + playerStatus(player_mode)
+    dispLine1 = playLabel + " " + str(track_n)[0:5] + "  " + progress + playerStatus(player_mode)
     outputToDisplay(dispLine1, dispLine2, dispLine3, dispLine4)
 
 
@@ -484,10 +474,12 @@ def add_removeCurrentAlbumFavs(trackNum):
         indexToRemove = albumFavourites.index(albumNum) if albumNum in albumFavourites else -1
         if indexToRemove == -1:
             albumFavourites.append(albumNum)
-            displayMessage( "Album + to Favs")
+            outputToDisplay("", "Album + to Favs", "", "")
+            time.sleep(1)
         else:
             albumFavourites.remove(indexToRemove)
-            displayMessage( "Album - From Favs")
+            outputToDisplay("", "Album - From Favs", "", "")
+            time.sleep(1)
         writeFavourites()
 
 
@@ -514,25 +506,7 @@ def Set_Volume():
             os.system("amixer set 'Digital' " + str(volume + 107))
     writeDefaults()
 
-def status():
-    global txt,player_mode,gapless,sleep_timer
-    txt = " "
-    if player_mode == 0:   # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
-        txt +="FV"
-    elif player_mode == 1:
-        txt +="AR"
-    elif player_mode == 2:
-        txt +="RT"
-    else:
-        txt +=" "
-    if gapless == 1:
-        txt +="G"
-    else:
-        txt +=" "
-    if sleep_timer > 0:
-        txt +="S"
-    else:
-        txt +=" "
+
 
 def playerStatus(player_mode):
     global gapless,sleep_timer
@@ -684,7 +658,7 @@ else:
 
 
 
-showTrackProgress(Track_No, -1)
+showTrackProgress(Track_No, "STOP", -1)
 
 if gapless == 0:
     gap = 0
@@ -755,7 +729,7 @@ while True:
         if time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0:
             timer1 = time.monotonic()
             if xt < 2:
-                showTrackProgress(Track_No, -1) 
+                showTrackProgress(Track_No, "STOP", -1) 
             elif xt == 2:
                 outputToDisplay("Status...  "  +  playerStatus(player_mode), "", "", "")
             elif xt == 3 and show_clock == 1 and synced == 1:
@@ -827,7 +801,7 @@ while True:
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
             else:
-                showTrackProgress(Track_No, -1)
+                showTrackProgress(Track_No, "STOP", -1)
             Disp_start = time.monotonic()
 
 
@@ -845,7 +819,7 @@ while True:
             Disp_start = time.monotonic()
             timer1 = time.monotonic()
             album = 0
-            displayMessage( "HOLD 5s: Play Favs" )
+            outputToDisplay("", "HOLD 5s: Play Favs", "", "")
             sleep_timer = 0
             while buttonPLAY.is_pressed and time.monotonic() - timer1 < buttonHold:
                 pass
@@ -886,7 +860,7 @@ while True:
         if buttonNEXT.is_pressed and len(tracks) > 1:
             Disp_on = 1
             time.sleep(0.2)
-            showTrackProgress(Track_No, -1)
+            showTrackProgress(Track_No, "STOP", -1)
             timer1 = time.monotonic()
             album = 1
             while buttonNEXT.is_pressed and time.monotonic() - timer1 < buttonHold:
@@ -897,7 +871,7 @@ while True:
             else:
                 # HOLD
                 Track_No = goToNextArtist(Track_No)
-            showTrackProgress(Track_No, -1)
+            showTrackProgress(Track_No, "STOP", -1)
             time.sleep(0.5)
             writeDefaults()
             Disp_start = time.monotonic()
@@ -913,7 +887,7 @@ while True:
             Disp_on = 1
             time.sleep(0.2)
             Track_No = goToPrevAlbum(Track_No)
-            showTrackProgress(Track_No, -1)
+            showTrackProgress(Track_No, "STOP", -1)
             timer1 = time.monotonic()
             album = 1
             while buttonPREV.is_pressed and time.monotonic() - timer1 < buttonHold:
@@ -924,7 +898,7 @@ while True:
             else:
                 # HOLD
                 Track_No = goToPrevArtist(Track_No)
-            showTrackProgress(Track_No, -1)
+            showTrackProgress(Track_No, "STOP", -1)
             time.sleep(0.5)
             writeDefaults()
             Disp_start = time.monotonic()
@@ -942,7 +916,7 @@ while True:
             if Disp_on == 0:
                 Disp_on = 1
                 Disp_start = time.monotonic()
-                showTrackProgress(Track_No, -1)
+                showTrackProgress(Track_No, "STOP", -1)
                 time.sleep(0.5)
             Set_Volume()
             time.sleep(0.5)
@@ -958,10 +932,9 @@ while True:
             if Disp_on == 0:
                 Disp_on = 1
                 Disp_start = time.monotonic()
-                status()
-                showTrackProgress(Track_No, -1)
+                showTrackProgress(Track_No, "STOP", -1)
                 time.sleep(0.5)
-                displayMessage( playerModeNames[player_mode] + "   ")
+                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
             timer1 = time.monotonic()
             while buttonFAVMODE.is_pressed and time.monotonic() - timer1 < buttonHold:
                 pass
@@ -971,7 +944,7 @@ while True:
                 ##############
                 player_mode += 1
                 player_mode = ( player_mode % numModes )
-                displayMessage( playerModeNames[player_mode] + "   ")
+                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
                 if player_mode == 0:   # Album Favs
                     radio = 0
                     MP3_play = 1
@@ -1267,7 +1240,7 @@ while True:
             track = getTrack(Track_No)
             rpistr = "mplayer " + " -quiet " +  '"' + track + '"'
             if Disp_on == 1:
-                showTrackProgress(Track_No, played_pc)
+                showTrackProgress(Track_No, "PLAY", played_pc)
             audio = MP3(track)
             track_len = audio.info.length
             # add track to history
@@ -1330,7 +1303,7 @@ while True:
                     timer1    = time.monotonic()
                     played_pc =  "     " + str(played_pc)
                     if xt < 2:
-                        showTrackProgress(Track_No, played_pc)
+                        showTrackProgress(Track_No, "PLAY", played_pc)
                     elif xt == 2:
                         outputToDisplay("Status...  " +  playerStatus(player_mode), "", "", "")
                     elif xt == 4 and sleep_timer != 0:
@@ -1369,7 +1342,7 @@ while True:
                     os.killpg(p.pid, SIGTERM)
                     outputToDisplay("Track Stopped", "", "", "")
                     time.sleep(2)
-                    displayTrack(Track_No, remainTracks)
+                    showTrackProgress(Track_No, "STOP", -1)
                     goToNextTrack = 0
                     MP3_Play = 0
                     writeDefaults()
@@ -1389,8 +1362,7 @@ while True:
                     os.killpg(p.pid, SIGTERM)
                     # add current track number to history, if not already last item
                     Track_No = selectNextTrack(Track_No)
-                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                    displayTrack(Track_No, remainTracks)
+                    showTrackProgress(Track_No, "PLAY", -1)
                     time.sleep(0.5)
                     goToNextTrack = 0
   
@@ -1411,8 +1383,7 @@ while True:
                         trackHistoryLast = len(trackHistory) -1
                         if len(trackHistory) > 0:
                             Track_No = trackHistory.pop(trackHistoryLast)   # use last item in track history then remove it
-                            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                            displayTrack(Track_No, remainTracks)
+                            showTrackProgress(Track_No, "PLAY", -1)
                             time.sleep(0.5)
                             goToNextTrack = 0
   
@@ -1431,7 +1402,7 @@ while True:
                     if Disp_on == 0:
                         Disp_on = 1
                         Disp_start = time.monotonic()
-                        displayTrack(Track_No, remainTracks)
+                        showTrackProgress(Track_No, "PLAY", played_pc)
                         time.sleep(0.5)
                     Set_Volume()
                     time.sleep(0.5)
@@ -1445,7 +1416,7 @@ while True:
                     if Disp_on == 0:
                         Disp_start = time.monotonic()
                         Disp_on = 1
-                        displayTrack(Track_No, remainTracks)
+                        showTrackProgress(Track_No, "PLAY", played_pc)
                         time.sleep(1)
                     Disp_on = 1
                     timer1 = time.monotonic()
