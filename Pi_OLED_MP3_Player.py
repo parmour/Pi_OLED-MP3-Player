@@ -67,7 +67,7 @@ Disp_timer   = 60   # Display timeout in seconds, set to 0 to disable
 show_clock   = 0    # set to 1 to show clock, only use if on web or using RTC
 gaptime      = 2    # set pre-start time for gapless, in seconds
 myUsername   = "philip"   # os.getlogin() not always working when script run automatically
-buttonHold   = 3    # number of seconds you need to hold keys to get different behaviour
+buttonHold   = 0.7    # number of seconds you need to hold keys to get different behaviour
 numModes     = 4
 
 Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
@@ -91,6 +91,10 @@ FAVMODE = 25# (22) CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album R
 
 favourites_file = "favourites.txt"
 
+def debugMsg( msgString ):
+    if debugOut:
+        print(msgString)
+
 def writeFavourites():
     global favourites_file, albumFavourites
     with open(favourites_file, 'w') as f:
@@ -106,6 +110,8 @@ if os.path.exists(favourites_file):
           albumFavourites.append(line.strip())
           line = file.readline()
     albumFavourites = list(map(int,albumFavourites))
+    debugMsg("Loading Favourites from file.")
+    debugMsg(albumFavourites)
 
 def writeDefaults():
     # config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
@@ -131,7 +137,8 @@ with open(config_file, "r") as file:
       config.append(line.strip())
       line = file.readline()
 config = list(map(int,config))
-
+debugMsg("Loading config from file.")
+debugMsg(config)
 
 radio_stn  = config[0]
 gapless    = config[1]
@@ -149,7 +156,6 @@ if auto_start:
         radio = 0
 
 trackHistory = []
-albumFavourites = []
 
 
 if Track_No < 0:
@@ -218,9 +224,7 @@ h_user.append(myUsername)   # os.getlogin() not always working when script run a
 
 favouritesIndex = 0
 
-def debugMsg( msgString ):
-    if debugOut:
-        print(msgString)
+
 
 def getTrack(trackNum):
     global tracks
@@ -1208,7 +1212,9 @@ while True:
             writeDefaults()
             time.sleep(2)
             
-
+    buttonFAVMODE_action = ""
+    buttonPREV_action = ""
+    buttonNEXT_action = ""
 
                     
     ############################################################
@@ -1409,38 +1415,71 @@ while True:
                 ######################################################################################
   
                   
+
+  
+
                 # check for NEXT key when playing MP3
-                if buttonNEXT.is_pressed:
-                    debugMsg("buttonNEXT PUSH")
-                    Disp_on = 1
-                    Disp_start = time.monotonic()
-                    os.killpg(p.pid, SIGTERM)
-                    # add current track number to history, if not already last item
-                    Track_No = selectNextTrack(Track_No)
-                    showTrackProgress(Track_No, "PLAY", -1)
-                    time.sleep(0.5)
-                    goToNextTrack = 0
-  
-  
+                if buttonNEXT_action:
+                    if not buttonNEXT.is_pressed:
+                        debugMsg("buttonNEXT: " + buttonNEXT_action)
+                        Disp_start = time.monotonic()
+                        Disp_on = 1
+                        os.killpg(p.pid, SIGTERM)                        
+                        if buttonNEXT_action == "PUSH":
+                            # push action
+                            Track_No = selectNextTrack(Track_No)
+                        elif buttonNEXT_action == "HOLD":
+                            # hold action
+                            Track_No = goToNextAlbum(Track_No)
+                        showTrackProgress(Track_No, "PLAY", -1)
+                        goToNextTrack = 0
+                        buttonNEXT_action = ""
+                else:                
+                    if buttonNEXT.is_pressed:
+                        buttonNEXT_action = "PUSH"
+                        buttonNEXT_timer = time.monotonic()
+                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonNEXT_timer))
+                        while buttonNEXT.is_pressed and (time.monotonic() - buttonNEXT_timer) < buttonHold:
+                            pass
+                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonNEXT_timer))
+                        if (time.monotonic() - buttonNEXT_timer) > buttonHold:
+                            buttonNEXT_action = "HOLD"    
   
   
                 ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
                 # PREV              PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST 
                 ######################################################################################
                   
-                # check for PREV key when playing MP3
-                if buttonPREV.is_pressed:
-                    debugMsg("buttonPREV PUSH")
-                    Disp_on = 1
-                    Disp_start = time.monotonic()
-                    Disp_on = 1
-                    os.killpg(p.pid, SIGTERM)
-                    Track_No = selectPrevTrack(Track_No)
-                    showTrackProgress(Track_No, "PLAY", -1)
-                    time.sleep(0.5)
-                    goToNextTrack = 0
 
-  
+
+
+
+                # check for PREV key when playing MP3
+                if buttonPREV_action:
+                    if not buttonPREV.is_pressed:
+                        debugMsg("buttonPREV: " + buttonPREV_action)
+                        Disp_start = time.monotonic()
+                        Disp_on = 1
+                        os.killpg(p.pid, SIGTERM)                        
+                        if buttonPREV_action == "PUSH":
+                            # push action
+                            Track_No = selectNextTrack(Track_No)
+                        elif buttonPREV_action == "HOLD":
+                            # hold action
+                            Track_No = goToNextAlbum(Track_No)
+                        showTrackProgress(Track_No, "PLAY", -1)
+                        goToNextTrack = 0
+                        buttonPREV_action = ""
+                else:                
+                    if buttonPREV.is_pressed:
+                        buttonPREV_action = "PUSH"
+                        buttonPREV_timer = time.monotonic()
+                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonPREV_timer))
+                        while buttonPREV.is_pressed and (time.monotonic() - buttonPREV_timer) < buttonHold:
+                            pass
+                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonPREV_timer))
+                        if (time.monotonic() - buttonPREV_timer) > buttonHold:
+                            buttonPREV_action = "HOLD"  
   
   
   
@@ -1463,22 +1502,28 @@ while True:
                     time.sleep(0.5)
   
                 ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
-                # FAVMODE           CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
+                # FAVMODE   CURRENT ALB > FAV ADD/REM  -        | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
                 ######################################################################################
                              
                 # check for FAVMODE key when playing MP3
-                buttonFAVMODE_action = ""
-                if buttonFAVMODE.is_pressed:
-                    buttonFAVMODE_action = "PUSH"
-                    buttonFAVMODE_timer = time.monotonic()
-                    while buttonFAVMODE.is_pressed and time.monotonic() - buttonFAVMODE_timer < buttonHold:
-                        pass
-                    buttonFAVMODE_action = "HOLD"
-                if buttonFAVMODE_action and not buttonFAVMODE.is_pressed:
-                    debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
-                    if buttonFAVMODE_action == "PUSH":
-                        # add current album to favourites
-                        add_removeCurrentAlbumFavs(Track_No)                        
+                if buttonFAVMODE_action:
+                    if not buttonFAVMODE.is_pressed:
+                        debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
+                        if buttonFAVMODE_action == "PUSH":
+                            # add current album to favourites
+                            add_removeCurrentAlbumFavs(Track_No)
+                        buttonFAVMODE_action = ""
+                else:                
+                    if buttonFAVMODE.is_pressed:
+                        buttonFAVMODE_action = "PUSH"
+                        buttonFAVMODE_timer = time.monotonic()
+                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonFAVMODE_timer))
+                        while buttonFAVMODE.is_pressed and (time.monotonic() - buttonFAVMODE_timer) < buttonHold:
+                            pass
+                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonFAVMODE_timer))
+                        if (time.monotonic() - buttonFAVMODE_timer) > buttonHold:
+                            buttonFAVMODE_action = "HOLD"
+                      
                 
 
 
