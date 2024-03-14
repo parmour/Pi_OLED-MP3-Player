@@ -17,6 +17,82 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
+"""
+        # check for FAVMODE key when stopped
+        if  buttonFAVMODE.is_pressed:
+            debugMsg("buttonFAVMODE PUSH")
+            if Disp_on == 0:
+                Disp_on = 1
+                Disp_start = time.monotonic()
+                showTrackProgress(Track_No, "STOP", -1)
+                time.sleep(0.5)
+                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
+            buttonFAVMODE_timer = time.monotonic()
+            while buttonFAVMODE.is_pressed and time.monotonic() - buttonFAVMODE_timer < buttonHold:
+                pass
+            if time.monotonic() - buttonFAVMODE_timer < buttonHold:
+                debugMsg("buttonFAVMODE HOLD")
+                ################
+                # Rotate through Modes  !!!
+                ##############
+                player_mode += 1
+                player_mode = ( player_mode % numModes )
+                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
+                if player_mode == 0:   # Album Favs
+                    radio = 0
+                    MP3_play = 1
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                elif player_mode == 1:   # Album Rand
+                    radio = 0
+                    MP3_play = 1                   
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                elif player_mode == 2:   # Rand Tracks
+                    radio = 0
+                    MP3_play = 1                  
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                else:     # Radio
+                    radio = 1
+                    MP3_play = 0
+                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
+                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                    rs = Radio_Stns[radio_stn] + "               "[0:19]
+                    writeDefaults()
+                # SHUTDOWN IF PRESSED FOR 10 SECONDS
+                sleep_timer +=900
+                if sleep_timer > 7200:
+                    sleep_timer = 0
+                sleep_timer_start = time.monotonic()
+                outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "HOLD for 10 to SHUTDOWN ", "", "")
+                time.sleep(0.25)
+                while buttonFAVMODE.is_pressed:
+                    debugMsg("buttonFAVMODE HOLD FOR SHUTDOWN")
+                    sleep_timer +=900
+                    if sleep_timer > 7200:
+                         sleep_timer = 0
+                    sleep_timer_start = time.monotonic()
+                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "", "", "")
+                    time.sleep(1)
+                    if time.monotonic() - buttonFAVMODE_timer > 5:
+                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1)), "", "")
+                    if time.monotonic() - timer1 > 10:
+                        # shutdown if pressed for 10 seconds
+                        outputToDisplay("SHUTTING DOWN...", "", "", "")
+                        time.sleep(2)
+                        outputToDisplay("", "", "", "")
+                        MP3_Play = 0
+                        radio = 0
+                        time.sleep(1)
+                        os.system("sudo shutdown -h now")
+                showTrackProgress(Track_No, "STOP", -1)
+                buttonFAVMODE_timer = time.monotonic()
+                xt = 2
+
+
+"""
+
 from gpiozero import Button
 import glob
 import subprocess
@@ -752,7 +828,9 @@ except:
 
 Track_No = selectNextTrack(Track_No)
 
-
+buttonFAVMODE_action = ""
+buttonPREV_action = ""
+buttonNEXT_action = ""
 
 while True:    
     #################################################
@@ -982,78 +1060,54 @@ while True:
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
         # FAVMODE           CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
         ######################################################################################
-            
+
         # check for FAVMODE key when stopped
-        if  buttonFAVMODE.is_pressed:
-            debugMsg("buttonFAVMODE PUSH")
-            if Disp_on == 0:
-                Disp_on = 1
-                Disp_start = time.monotonic()
-                showTrackProgress(Track_No, "STOP", -1)
-                time.sleep(0.5)
-                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
-            buttonFAVMODE_timer = time.monotonic()
-            while buttonFAVMODE.is_pressed and time.monotonic() - buttonFAVMODE_timer < buttonHold:
-                pass
-            if time.monotonic() - buttonFAVMODE_timer < buttonHold:
-                debugMsg("buttonFAVMODE HOLD")
-                ################
-                # Rotate through Modes  !!!
-                ##############
-                player_mode += 1
-                player_mode = ( player_mode % numModes )
-                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
-                if player_mode == 0:   # Album Favs
-                    radio = 0
-                    MP3_play = 1
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                elif player_mode == 1:   # Album Rand
-                    radio = 0
-                    MP3_play = 1                   
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                elif player_mode == 2:   # Rand Tracks
-                    radio = 0
-                    MP3_play = 1                  
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                else:     # Radio
-                    radio = 1
-                    MP3_play = 0
-                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
-                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
-                    rs = Radio_Stns[radio_stn] + "               "[0:19]
-                    writeDefaults()
-                # SHUTDOWN IF PRESSED FOR 10 SECONDS
-                sleep_timer +=900
-                if sleep_timer > 7200:
-                    sleep_timer = 0
-                sleep_timer_start = time.monotonic()
-                outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "HOLD for 10 to SHUTDOWN ", "", "")
-                time.sleep(0.25)
-                while buttonFAVMODE.is_pressed:
-                    debugMsg("buttonFAVMODE HOLD FOR SHUTDOWN")
-                    sleep_timer +=900
-                    if sleep_timer > 7200:
-                         sleep_timer = 0
-                    sleep_timer_start = time.monotonic()
-                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "", "", "")
+        if buttonFAVMODE_action:
+            if not buttonFAVMODE.is_pressed:   # actions when button released
+                debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
+                if buttonFAVMODE_action == "PUSH":
+                    # display current mode
+                    outputToDisplay("     MODE:", playerModeNames[player_mode] + "   " , "", "")
                     time.sleep(1)
-                    if time.monotonic() - buttonFAVMODE_timer > 5:
-                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1)), "", "")
-                    if time.monotonic() - timer1 > 10:
-                        # shutdown if pressed for 10 seconds
-                        outputToDisplay("SHUTTING DOWN...", "", "", "")
-                        time.sleep(2)
-                        outputToDisplay("", "", "", "")
-                        MP3_Play = 0
-                        radio = 0
-                        time.sleep(1)
-                        os.system("sudo shutdown -h now")
-                showTrackProgress(Track_No, "STOP", -1)
+                buttonFAVMODE_action = ""
+        else:                
+            if buttonFAVMODE.is_pressed:   # actions when button held
+                buttonFAVMODE_action = "PUSH"
                 buttonFAVMODE_timer = time.monotonic()
-                xt = 2
+                while buttonFAVMODE.is_pressed and (time.monotonic() - buttonFAVMODE_timer) < buttonHold:
+                    pass
+                if (time.monotonic() - buttonFAVMODE_timer) > buttonHold:
+                    buttonFAVMODE_action = "HOLD"
+                    # rotate to next mode
+                    player_mode = (int(time.monotonic() - buttonFAVMODE_timer - buttonHold) % numModes ) # this will change each second as button held
+                    outputToDisplay("     MODE:", playerModeNames[player_mode] + "   " , "", "")
+                    if player_mode == 0:   # Album Favs
+                        radio = 0
+                        MP3_play = 1
+                        Track_No = selectNextTrack(Track_No)
+                        writeDefaults()
+                    elif player_mode == 1:   # Album Rand
+                        radio = 0
+                        MP3_play = 1                   
+                        Track_No = selectNextTrack(Track_No)
+                        writeDefaults()
+                    elif player_mode == 2:   # Rand Tracks
+                        radio = 0
+                        MP3_play = 1                  
+                        Track_No = selectNextTrack(Track_No)
+                        writeDefaults()
+                    else:     # Radio
+                        radio = 1
+                        MP3_play = 0
+                        q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
+                        outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                        rs = Radio_Stns[radio_stn] + "               "[0:19]
+                        writeDefaults()                   
+
+
+
+            
+
             
     #######################################################
     ######       loop while playing radio   ###############
@@ -1212,9 +1266,7 @@ while True:
             writeDefaults()
             time.sleep(2)
             
-    buttonFAVMODE_action = ""
-    buttonPREV_action = ""
-    buttonNEXT_action = ""
+
 
                     
     ############################################################
@@ -1420,7 +1472,7 @@ while True:
 
                 # check for NEXT key when playing MP3
                 if buttonNEXT_action:
-                    if not buttonNEXT.is_pressed:
+                    if not buttonNEXT.is_pressed:   # perform actions when button released
                         debugMsg("buttonNEXT: " + buttonNEXT_action)
                         Disp_start = time.monotonic()
                         Disp_on = 1
@@ -1435,7 +1487,7 @@ while True:
                         goToNextTrack = 0
                         buttonNEXT_action = ""
                 else:                
-                    if buttonNEXT.is_pressed:
+                    if buttonNEXT.is_pressed:    # perform actions when button held
                         buttonNEXT_action = "PUSH"
                         buttonNEXT_timer = time.monotonic()
                         #debugMsg("Interval 1: " + str(time.monotonic() - buttonNEXT_timer))
