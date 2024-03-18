@@ -247,6 +247,16 @@ def outputToDisplay(dispLine1,dispLine2,dispLine3,dispLine4):
     disp.image(image)
     disp.display()
 
+def outputToDisplayFlashing(dispLine1,dispLine2,dispLine3,dispLine4):
+    numberFlashes = 5
+    while numberFlashes:
+        numberFlashes -= 1
+        outputToDisplay("", "", "", "")
+        time.sleep(0.2)
+        outputToDisplay(dispLine1,dispLine2,dispLine3,dispLine4)
+        time.sleep(0.2)
+    time.sleep(1)
+
 outputToDisplay("MP3 Player: v" + version, "", "", "")
 time.sleep(2)
 stop = 0
@@ -413,6 +423,10 @@ def getSongDetails(trackNum):
         pass
     return ( out1, out2, out3)
 
+def getSingleLineSongDetails(trackNum):
+    ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
+    return album[0:5] + " " + song[0:12]
+
 
 def goToNextFavourite():
     global favouritesIndex, albumDictionary, albumList
@@ -516,10 +530,60 @@ def getAlbumNum(trackNum):
     uniqAlbum = album + " - " + artist
     albumNum = albumList.index(uniqAlbum)
     return albumNum
+
+def getArtistNum(trackNum):
+    global artistList
+    ( artist, album, song ) = getArtistAlbumSongNames(trackNum)
+    artistNum = artistList.index(artist)
+    return artistNum
+
+def displayTrackList(trackNum):
+    global tracks
+    maxTrack = len(tracks) - 1
+    trackNum = albumNumber % maxTrack
+    trackNumInc1 = ( albumNumber + 1 ) % maxTrack
+    trackNumInc2 = ( albumNumber + 2 ) % maxTrack
+    trackNumInc3 = ( albumNumber + 3 ) % maxTrack
+    outputToDisplay(getSingleLineSongDetails(trackNum),getSingleLineSongDetails(trackNumInc1),getSingleLineSongDetails(trackNumInc2),getSingleLineSongDetails(trackNumInc3))
     
+def displayAlbumList(albumNumber):
+    global albumList
+    maxAlbum = len(albumList)
+    albumNumber = albumNumber % maxAlbum
+    albumNumberInc1 = ( albumNumber + 1 ) % maxAlbum
+    albumNumberInc2 = ( albumNumber + 2 ) % maxAlbum
+    albumNumberInc3 = ( albumNumber + 3 ) % maxAlbum
+    outputToDisplay(albumList[albumNumber],albumList[albumNumberInc1],albumList[albumNumberInc2],albumList[albumNumberInc3])
+    
+def displayArtistList(artistNumber):
+    global artistList
+    maxArtist = len(artistList)
+    artistNumber = artistNumber % maxArtist
+    artistNumberInc1 = ( artistNumber + 1 ) % maxArtist
+    artistNumberInc2 = ( artistNumber + 2 ) % maxArtist
+    artistNumberInc3 = ( artistNumber + 3 ) % maxArtist
+    outputToDisplay(artistList[artistNumber],artistList[artistNumberInc1],artistList[artistNumberInc2],artistList[artistNumberInc3])
 
-
-        
+def browseNext(trackNum, browseMode):
+    global tracks, albumList, artistList, albumDictionary, artistDictionary
+    if browseMode == "Track":
+        displayTrackList(trackNum)
+        trackNum = ( trackNum + 1 ) % len(tracks)
+        return trackNum
+    if browseMode == "Album":
+        albumNumber = getAlbumNum(trackNum)
+        displayAlbumList(albumNumber)
+        albumNumber = ( albumNumber + 1 ) % len(albumList)
+        albumName = albumList[albumNumber]
+        (albumStart, albumFinish) = albumDictionary[albumName]
+        return albumStart
+    if browseMode == "Artist":
+        artistNumber = getArtistNum(trackNum)
+        displayArtistList(artistNumber)
+        artistNumber = ( artistNumber + 1 ) % len(artistList)
+        artistName = artistList[artistNumber]
+        (artistStart, artistFinish) = artistDictionary[artistName]
+        return artistStart
 
 def add_removeCurrentAlbumFavs(trackNum):
     global albumFavourites
@@ -759,6 +823,8 @@ buttonFAVMODE_action = ""
 buttonPREV_action = ""
 buttonNEXT_action = ""
 
+displayIsBusy = False
+
 while True:    
     #################################################
     ######       loop while stopped   ###############
@@ -786,7 +852,7 @@ while True:
                 pass
             
         # display Artist / Album / Track names
-        if time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0:
+        if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not displayIsBusy:
             timer1 = time.monotonic()
             if xt < 2:
                 showTrackProgress(Track_No, "STOP", -1) 
@@ -808,7 +874,7 @@ while True:
                 xt = 0
 
         # display clock (if enabled and synced)
-        if show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1:
+        if (show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1) and not displayIsBusy:
             now = datetime.datetime.now()
             clock = now.strftime("%H:%M:%S")
             secs = now.strftime("%S")
@@ -829,13 +895,13 @@ while True:
                 old_secs2 = secs
 
         # DISPLAY OFF timer
-        if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
+        if (time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1) and not displayIsBusy:
             outputToDisplay("", "", "", "")
             Disp_on = 0
 
             
         # sleep_timer timer
-        if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
+        if (time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0) and not displayIsBusy:
             Disp_start = time.monotonic()
             abort_sd = 0
             t = 30
@@ -916,26 +982,36 @@ while True:
         # NEXT              NEXT TRACK/RADIO - NEXT ALB | BROWSE NEXT ALB - BROWSE NEXT ARTIST 
         ######################################################################################
                 
+
+
         # check NEXT key when stopped
-        if buttonNEXT.is_pressed and len(tracks) > 1:
-            Disp_on = 1
-            time.sleep(0.2)
-            showTrackProgress(Track_No, "STOP", -1)
-            buttonNEXT_timer = time.monotonic()
-            album = 1
-            while buttonNEXT.is_pressed and time.monotonic() - buttonNEXT_timer < buttonHold:
-                pass
-            if time.monotonic() - buttonNEXT_timer < buttonHold and len(tracks) > 0:
-                debugMsg("buttonNEXT PUSH") # PUSH
-                Track_No = goToNextAlbum(Track_No)
-            else:
-                debugMsg("buttonNEXT HOLD")  # HOLD
-                Track_No = goToNextArtist(Track_No)
-            showTrackProgress(Track_No, "STOP", -1)
-            time.sleep(0.5)
-            writeDefaults()
-            Disp_start = time.monotonic()
-            buttonNEXT_timer = time.monotonic()
+        if buttonNEXT_action:
+            if not buttonNEXT.is_pressed:   # actions when button released
+                debugMsg("buttonNEXT: " + buttonNEXT_action)
+                # button released after push - action new selection - show track list
+                displayTrackList(Track_No)
+                buttonNEXT_action = ""
+                browseMode = "Track"
+                displayIsBusy = False
+            else:   # actions when button held
+                buttonNEXT_action = "HOLD"
+                buttonNEXT_holdtime = time.monotonic() - buttonNEXT_timer 
+                if buttonNEXT_holdtime > (buttonHold + 3) and browseMode == "Track":  # after holding 3 seconds start browsing albums
+                    browseMode = "Album"
+                if buttonNEXT_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
+                    browseMode = "Artist"
+                if int((buttonNEXT_holdtime / 0.2)) % 2:
+                    Track_No = browseNext(Track_No, browseMode)
+                    displayIsBusy = True     
+        else:                
+            if buttonNEXT.is_pressed:   # actions when button held
+                buttonNEXT_action = "PUSH"
+                buttonNEXT_timer = time.monotonic()
+                if (time.monotonic() - buttonNEXT_timer) > buttonHold:
+                    buttonNEXT_action = "HOLD"
+
+
+    
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
@@ -994,12 +1070,12 @@ while True:
                 debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
                 if buttonFAVMODE_action == "PUSH":
                     # display current mode
-                    outputToDisplay("     MODE:", playerModeNames[player_mode] + "   " , "", "")
+                    outputToDisplay("CURRENT MODE:", playerModeNames[player_mode] + "   " , "", "")
                     time.sleep(1)
                 elif buttonFAVMODE_action == "HOLD":
                     if player_mode != new_player_mode:
                         player_mode = new_player_mode
-                        outputToDisplay(" NEW MODE:", playerModeNames[player_mode] + "   " , "", "")
+                        outputToDisplayFlashing("", playerModeNames[player_mode] + "   " , "", "")
                         time.sleep(1)
                         if player_mode == 0:   # Album Favs
                             radio = 0
@@ -1023,12 +1099,13 @@ while True:
                             outputToDisplay(Radio_Stns[radio_stn], "", "", "")
                             rs = Radio_Stns[radio_stn] + "               "[0:19]
                             writeDefaults()
-
                 buttonFAVMODE_action = ""
+                displayIsBusy = False
             else:   # actions when button held               
                 new_player_mode = (int(time.monotonic() - buttonFAVMODE_timer - buttonHold) % numModes ) # this will change each second as button held
-                outputToDisplay("     MODE:", playerModeNames[new_player_mode] + "   " , "", "")
+                outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   " , "", "")
                 buttonFAVMODE_action = "HOLD"
+                displayIsBusy = True
         else:                
             if buttonFAVMODE.is_pressed:   # actions when button held
                 buttonFAVMODE_action = "PUSH"
@@ -1453,10 +1530,10 @@ while True:
                         os.killpg(p.pid, SIGTERM)                        
                         if buttonPREV_action == "PUSH":
                             # push action
-                            Track_No = selectNextTrack(Track_No)
+                            Track_No = selectPrevTrack(Track_No)
                         elif buttonPREV_action == "HOLD":
                             # hold action
-                            Track_No = goToNextAlbum(Track_No)
+                            Track_No = goToPrevAlbum(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
                         buttonPREV_action = ""
