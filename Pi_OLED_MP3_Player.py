@@ -425,7 +425,7 @@ def getSongDetails(trackNum):
 
 def getSingleLineSongDetails(trackNum):
     ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
-    return album[0:5] + " " + song[0:12]
+    return song[0:19]
 
 
 def goToNextFavourite():
@@ -540,10 +540,10 @@ def getArtistNum(trackNum):
 def displayTrackList(trackNum):
     global tracks
     maxTrack = len(tracks) - 1
-    trackNum = albumNumber % maxTrack
-    trackNumInc1 = ( albumNumber + 1 ) % maxTrack
-    trackNumInc2 = ( albumNumber + 2 ) % maxTrack
-    trackNumInc3 = ( albumNumber + 3 ) % maxTrack
+    trackNum = trackNum % maxTrack
+    trackNumInc1 = ( trackNum + 1 ) % maxTrack
+    trackNumInc2 = ( trackNum + 2 ) % maxTrack
+    trackNumInc3 = ( trackNum + 3 ) % maxTrack
     outputToDisplay(getSingleLineSongDetails(trackNum),getSingleLineSongDetails(trackNumInc1),getSingleLineSongDetails(trackNumInc2),getSingleLineSongDetails(trackNumInc3))
     
 def displayAlbumList(albumNumber):
@@ -824,6 +824,7 @@ buttonPREV_action = ""
 buttonNEXT_action = ""
 
 displayIsBusy = False
+browseMode = "Track"
 
 while True:    
     #################################################
@@ -1000,7 +1001,7 @@ while True:
                     browseMode = "Album"
                 if buttonNEXT_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
                     browseMode = "Artist"
-                if int((buttonNEXT_holdtime / 0.2)) % 2:
+                if int((buttonNEXT_holdtime / 0.1)) % 2:
                     Track_No = browseNext(Track_No, browseMode)
                     displayIsBusy = True     
         else:                
