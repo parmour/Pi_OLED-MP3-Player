@@ -564,23 +564,23 @@ def displayArtistList(artistNumber):
     artistNumberInc3 = ( artistNumber + 3 ) % maxArtist
     outputToDisplay(artistList[artistNumber],artistList[artistNumberInc1],artistList[artistNumberInc2],artistList[artistNumberInc3])
 
-def browseNext(trackNum, browseMode):
+def browseMusic(trackNum, browseMode, deltaValue):
     global tracks, albumList, artistList, albumDictionary, artistDictionary
     if browseMode == "Track":
         displayTrackList(trackNum)
-        trackNum = ( trackNum + 1 ) % len(tracks)
+        trackNum = ( trackNum + deltaValue ) % len(tracks)
         return trackNum
     if browseMode == "Album":
         albumNumber = getAlbumNum(trackNum)
         displayAlbumList(albumNumber)
-        albumNumber = ( albumNumber + 1 ) % len(albumList)
+        albumNumber = ( albumNumber + deltaValue ) % len(albumList)
         albumName = albumList[albumNumber]
         (albumStart, albumFinish) = albumDictionary[albumName]
         return albumStart
     if browseMode == "Artist":
         artistNumber = getArtistNum(trackNum)
         displayArtistList(artistNumber)
-        artistNumber = ( artistNumber + 1 ) % len(artistList)
+        artistNumber = ( artistNumber + deltaValue ) % len(artistList)
         artistName = artistList[artistNumber]
         (artistStart, artistFinish) = artistDictionary[artistName]
         return artistStart
@@ -823,7 +823,8 @@ buttonFAVMODE_action = ""
 buttonPREV_action = ""
 buttonNEXT_action = ""
 
-displayIsBusy = False
+chooseFavsActive = False
+browseActive = False
 browseMode = "Track"
 
 while True:    
@@ -853,7 +854,7 @@ while True:
                 pass
             
         # display Artist / Album / Track names
-        if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not displayIsBusy:
+        if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not (chooseFavsActive or browseActive):
             timer1 = time.monotonic()
             if xt < 2:
                 showTrackProgress(Track_No, "STOP", -1) 
@@ -875,7 +876,7 @@ while True:
                 xt = 0
 
         # display clock (if enabled and synced)
-        if (show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1) and not displayIsBusy:
+        if (show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1) and not (chooseFavsActive or browseActive):
             now = datetime.datetime.now()
             clock = now.strftime("%H:%M:%S")
             secs = now.strftime("%S")
@@ -896,13 +897,13 @@ while True:
                 old_secs2 = secs
 
         # DISPLAY OFF timer
-        if (time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1) and not displayIsBusy:
+        if (time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1) and not (chooseFavsActive or browseActive):
             outputToDisplay("", "", "", "")
             Disp_on = 0
 
             
         # sleep_timer timer
-        if (time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0) and not displayIsBusy:
+        if (time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0) and not (chooseFavsActive or browseActive):
             Disp_start = time.monotonic()
             abort_sd = 0
             t = 30
@@ -990,10 +991,10 @@ while True:
             if not buttonNEXT.is_pressed:   # actions when button released
                 debugMsg("buttonNEXT: " + buttonNEXT_action)
                 # button released after push - action new selection - show track list
-                displayTrackList(Track_No)
+                Track_No = browseMusic(Track_No, browseMode, 1)
                 buttonNEXT_action = ""
-                browseMode = "Track"
-                displayIsBusy = False
+                browseActive = True
+                browseTimer = time.monotonic()
             else:   # actions when button held
                 buttonNEXT_action = "HOLD"
                 buttonNEXT_holdtime = time.monotonic() - buttonNEXT_timer 
@@ -1001,9 +1002,10 @@ while True:
                     browseMode = "Album"
                 if buttonNEXT_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
                     browseMode = "Artist"
-                if int((buttonNEXT_holdtime / 0.1)) % 2:
-                    Track_No = browseNext(Track_No, browseMode)
-                    displayIsBusy = True     
+                if int((buttonNEXT_holdtime / 0.3)) % 2:
+                    Track_No = browseMusic(Track_No, browseMode, 1)
+                    browseActive = True
+                    browseTimer = time.monotonic()
         else:                
             if buttonNEXT.is_pressed:   # actions when button held
                 buttonNEXT_action = "PUSH"
@@ -1011,35 +1013,50 @@ while True:
                 if (time.monotonic() - buttonNEXT_timer) > buttonHold:
                     buttonNEXT_action = "HOLD"
 
-
-    
+        if browseActive and (time.monotonic() - browseTimer) > 1:
+            if browseMode == "Artist":
+                browseMode = "Album"
+                browseTimer = time.monotonic()
+            elif browseMode == "Album":
+                browseMode = "Track"
+                browseTimer = time.monotonic()
+            elif browseMode == "Track":              
+                browseActive = False
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
         # PREV              PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST 
         ######################################################################################
 
-        # check PREV key when stopped
-        if  buttonPREV.is_pressed and len(tracks) > 1:
-            Disp_on = 1
-            time.sleep(0.2)
-            Track_No = goToPrevAlbum(Track_No)
-            showTrackProgress(Track_No, "STOP", -1)
-            buttonPREV_timer = time.monotonic()
-            album = 1
-            while buttonPREV.is_pressed and time.monotonic() - buttonPREV_timer < buttonHold:
-                pass
-            if time.monotonic() - buttonPREV_timer < buttonHold and len(tracks) > 0:
-                debugMsg("buttonNEXT PUSH") # PUSH
-                Track_No = goToPrevAlbum(Track_No)
-            else:
-                debugMsg("buttonPREV HOLD") # HOLD
-                Track_No = goToPrevArtist(Track_No)
-            showTrackProgress(Track_No, "STOP", -1)
-            time.sleep(0.5)
-            writeDefaults()
-            Disp_start = time.monotonic()
-            buttonPREV_timer = time.monotonic()
+        # check NEXT key when stopped
+        if buttonPREV_action:
+            if not buttonPREV.is_pressed:   # actions when button released
+                debugMsg("buttonPREV: " + buttonPREV_action)
+                # button released after push - action new selection - show track list
+                Track_No = browseMusic(Track_No, browseMode, -1)
+                buttonPREV_action = ""
+                browseActive = True
+                browseTimer = time.monotonic()
+            else:   # actions when button held
+                buttonPREV_action = "HOLD"
+                buttonPREV_holdtime = time.monotonic() - buttonPREV_timer 
+                if buttonPREV_holdtime > (buttonHold + 3) and browseMode == "Track":  # after holding 3 seconds start browsing albums
+                    browseMode = "Album"
+                if buttonPREV_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
+                    browseMode = "Artist"
+                if int((buttonPREV_holdtime / 0.3)) % 2:
+                    Track_No = browseMusic(Track_No, browseMode, -1)
+                    browseActive = True
+                    browseTimer = time.monotonic()
+        else:                
+            if buttonPREV.is_pressed:   # actions when button held
+                buttonPREV_action = "PUSH"
+                buttonPREV_timer = time.monotonic()
+                if (time.monotonic() - buttonPREV_timer) > buttonHold:
+                    buttonPREV_action = "HOLD"
+
+
+
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
@@ -1101,12 +1118,12 @@ while True:
                             rs = Radio_Stns[radio_stn] + "               "[0:19]
                             writeDefaults()
                 buttonFAVMODE_action = ""
-                displayIsBusy = False
+                chooseFavsActive = False
             else:   # actions when button held               
                 new_player_mode = (int(time.monotonic() - buttonFAVMODE_timer - buttonHold) % numModes ) # this will change each second as button held
                 outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   " , "", "")
                 buttonFAVMODE_action = "HOLD"
-                displayIsBusy = True
+                chooseFavsActive = True
         else:                
             if buttonFAVMODE.is_pressed:   # actions when button held
                 buttonFAVMODE_action = "PUSH"
