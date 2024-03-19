@@ -822,6 +822,7 @@ Track_No = selectNextTrack(Track_No)
 buttonFAVMODE_action = ""
 buttonPREV_action = ""
 buttonNEXT_action = ""
+buttonPLAY_action = ""
 
 chooseFavsActive = False
 browseActive = False
@@ -940,44 +941,57 @@ while True:
         ######################################################################################
 
             
-        # PLAY key while stopped
-        if buttonPLAY.is_pressed:
-            stopped = 0
-            Disp_on = 1
-            Disp_start = time.monotonic()
-            buttonPLAY_timer = time.monotonic()
-            album = 0
-            outputToDisplay("", "HOLD 5s: Play Favs", "", "")
-            sleep_timer = 0
-            while buttonPLAY.is_pressed and time.monotonic() - buttonPLAY_timer < buttonHold:
-                pass
-            if time.monotonic() - buttonPLAY_timer < buttonHold and len(tracks) > 0:
-                debugMsg("buttonPLAY PUSH") ## PUSH
-                # player mode is radio
-                if player_mode == 3:
-                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-                    time.sleep(0.05)
-                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
-                    rs = Radio_Stns[radio_stn]
-                    while buttonPLAY.is_pressed:
-                        pass
-                    time.sleep(1)
-                    radio    = 1
-                    MP3_Play = 0
-                    writeDefaults()                
-                # player mode is not radio
-                else:
+
+
+
+
+        # check for PLAY key when stopped
+        if buttonPLAY_action:
+            if not buttonPLAY.is_pressed:   # actions when button released
+                debugMsg("buttonPLAY: " + buttonPLAY_action)
+                if buttonPLAY_action == "PUSH":   # released after push
+                    # player mode is radio
+                    if player_mode == 3:
+                        q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
+                        time.sleep(0.05)
+                        outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                        rs = Radio_Stns[radio_stn]
+                        while buttonPLAY.is_pressed:
+                            pass
+                        time.sleep(1)
+                        radio    = 1
+                        MP3_Play = 0
+                        writeDefaults()                
+                    # player mode is not radio
+                    else:
+                        if player_mode == 0 or player_mode == 1:
+                            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                            stimer = getRemainingAlbumTime(Track_No) 
+                        MP3_Play = 1
+                        radio    = 0
+                        writeDefaults()
+                elif buttonPLAY_action == "HOLD":   # released after hold
+                    # player mode is not radio and rand tracks
                     if player_mode == 0 or player_mode == 1:
+                        Track_No = goToNextFavourite()   # play from start of favourites
                         (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                         stimer = getRemainingAlbumTime(Track_No) 
-                    MP3_Play = 1
-                    radio    = 0
-                    writeDefaults()
-            else:   # HOLD
-                debugMsg("buttonPLAY HOLD") 
-                # player mode is not radio
-                if player_mode != 3:
-                    pass   # play from start of favourites
+                        MP3_Play = 1
+                        radio    = 0
+                        writeDefaults()
+                buttonPLAY_action = ""
+            else:   # actions when button held               
+                buttonPLAY_action = "HOLD"
+
+        else:                
+            if buttonPLAY.is_pressed:   # actions when button held
+                buttonPLAY_action = "PUSH"
+                buttonPLAY_timer = time.monotonic()
+                if (time.monotonic() - buttonPLAY_timer) > buttonHold:
+                    buttonPLAY_action = "HOLD"
+
+
+
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
