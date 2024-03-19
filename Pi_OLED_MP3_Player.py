@@ -73,6 +73,8 @@ myUsername   = "philip"   # os.getlogin() not always working when script run aut
 buttonHold   = 0.7    # number of seconds you need to hold keys to get different behaviour
 numModes     = 4
 
+baseDir = "/home/" + myUsername
+
 Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
               "Radio Paradise Main","http://stream.radioparadise.com/mp3-320",
               "Radio Paradise Mellow","http://stream.radioparadise.com/mellow-192",
@@ -92,7 +94,7 @@ VOLDN  = 16 # (36) VOL DN                      | VOL DN
 VOLUP  = 8  # (24) VOL UP                      | VOL UP
 FAVMODE = 25# (22) CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
 
-favourites_file = "favourites.txt"
+favourites_file = baseDir + "/favourites.txt"
 
 def debugMsg( msgString ):
     if debugOut:
@@ -128,7 +130,7 @@ def writeDefaults():
 
 
 # check config file exists, if not then write default values
-config_file = "OLEDconfig.txt"
+config_file = baseDir + "/OLEDconfig.txt"
 if not os.path.exists(config_file):
     writeDefaults()
 
@@ -180,8 +182,8 @@ top = -2
 font = ImageFont.load_default()
 
 # read radio_stns.txt - format: Station Name,Station URL
-if os.path.exists ("radio_stns.txt"): 
-    with open("radio_stns.txt","r") as textobj:
+if os.path.exists (baseDir + "/radio_stns.txt"): 
+    with open(baseDir + "/radio_stns.txt","r") as textobj:
         line = textobj.readline()
         while line:
            if line.count(",") == 1:
@@ -280,7 +282,7 @@ def reload():
         tracks.append(track)
     if len(tracks) > 0:
         tracks.sort()
-    with open('tracks.txt', 'w') as f:
+    with open(baseDir + "/tracks.txt", 'w') as f:
         for item in tracks:
             f.write("%s\n" % item)
     Track_No = 0
@@ -434,7 +436,7 @@ def goToNextFavourite():
         nextFav = albumFavourites[favouritesIndex]
         nextUniqAlbum = albumList[nextFav]
         ( favAlbumFirst, favAlbumLast) = albumDictionary[nextUniqAlbum]
-        favouritesIndex += 1
+        favouritesIndex = (favouritesIndex + 1) % len(albumFavourites)
         return favAlbumFirst
     else:
         return 0
@@ -449,7 +451,7 @@ def selectNextTrack(trackNum):
         trackNum = goToRandomTrack()                        
     # if Album Favs go to the next track in the album, if at last track, go to the next favourite, if no more favourites change to Album Rand
     elif player_mode == 0:
-        if len(albumFavourites) == 0 or favouritesIndex > len(albumFavourites):  # we ran out of favourites, so switch to Album Rand
+        if len(albumFavourites) == 0 or favouritesIndex >= len(albumFavourites):  # we ran out of favourites, so switch to Album Rand
             favouritesIndex = 0
             player_mode = 1
         else:
@@ -653,22 +655,22 @@ def playerStatus(player_mode):
 
 
 # read previous usb free space of upto 4 usb devices, to see if usb data has changed
-if not os.path.exists('freedisk.txt'):
-    with open("freedisk.txt", "w") as f:
+if not os.path.exists(baseDir + "/freedisk.txt"):
+    with open(baseDir + "/freedisk.txt", "w") as f:
         for item in freedisk:
             f.write("%s\n" % item)
 freedisk = []            
-with open("freedisk.txt", "r") as file:
+with open(baseDir + "/freedisk.txt", "r") as file:
     line = file.readline()
     while line:
          freedisk.append(line.strip())
          line = file.readline()
          
 # check if SD Card ~/Music has changed
-if not os.path.exists('freeSD.txt'):
-    with open("freeSD.txt", "w") as f:
+if not os.path.exists(baseDir + "/freeSD.txt"):
+    with open(baseDir + "/freeSD.txt", "w") as f:
             f.write("0")
-with open("freeSD.txt", "r") as file:
+with open(baseDir + "/freeSD.txt", "r") as file:
     line = file.readline()
 
 def get_dir_size(dir_path):
@@ -682,16 +684,16 @@ def get_dir_size(dir_path):
 
 total_size = get_dir_size("/home/" +  h_user[0] + "/Music")
 if line != str(total_size):
-    with open("freeSD.txt", "w") as f:
+    with open(baseDir + "/freeSD.txt", "w") as f:
         f.write(str(total_size))
     reloading = 1
 
 # load MP3 tracks
 tracks  = []
-if not os.path.exists('tracks.txt') and stop == 0:
+if not os.path.exists(baseDir + "/tracks.txt") and stop == 0:
     reload()
 else:
-    with open("tracks.txt", "r") as file:
+    with open(baseDir + "/tracks.txt", "r") as file:
         line = file.readline()
         while line:
              tracks.append(line.strip())
@@ -718,13 +720,13 @@ if use_USB == 1:
             free[xy] = str((st3.f_bavail * st3.f_frsize)/1100000)
         for xy in range(0,3):
             if str(free[xy]) != freedisk[xy]:
-                with open("freedisk.txt", "w") as f:
+                with open(baseDir + "/freedisk.txt", "w") as f:
                     for item in free:
                         f.write("%s\n" % item)
                 reloading = 1
     else:
         freedisk = ["0","0","0","0"]
-        with open("freedisk.txt", "w") as f:
+        with open(baseDir + "/freedisk.txt", "w") as f:
             for item in freedisk:
                 f.write("%s\n" % item)
         outputToDisplay("Checking for USB", "No USB Found !!", "", "")
