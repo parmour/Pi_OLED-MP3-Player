@@ -426,8 +426,8 @@ def getSongDetails(trackNum):
     return ( out1, out2, out3)
 
 def getSingleLineSongDetails(trackNum):
-    ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
-    return song[0:19]
+    ( artist, album, song ) = getArtistAlbumSongNames(trackNum)
+    return song[0:18]
 
 
 def goToNextFavourite():
@@ -542,29 +542,29 @@ def getArtistNum(trackNum):
 def displayTrackList(trackNum):
     global tracks
     maxTrack = len(tracks) - 1
+    trackNumDec1 = ( trackNum -1 ) % maxTrack
     trackNum = trackNum % maxTrack
     trackNumInc1 = ( trackNum + 1 ) % maxTrack
     trackNumInc2 = ( trackNum + 2 ) % maxTrack
-    trackNumInc3 = ( trackNum + 3 ) % maxTrack
-    outputToDisplay(getSingleLineSongDetails(trackNum),getSingleLineSongDetails(trackNumInc1),getSingleLineSongDetails(trackNumInc2),getSingleLineSongDetails(trackNumInc3))
+    outputToDisplay(" " + getSingleLineSongDetails(trackNumDec1),getSingleLineSongDetails(trackNum)," " + getSingleLineSongDetails(trackNumInc1)," " + getSingleLineSongDetails(trackNumInc2))
     
 def displayAlbumList(albumNumber):
     global albumList
     maxAlbum = len(albumList)
+    albumNumberDec1 = ( albumNumber -1 ) % maxAlbum
     albumNumber = albumNumber % maxAlbum
     albumNumberInc1 = ( albumNumber + 1 ) % maxAlbum
     albumNumberInc2 = ( albumNumber + 2 ) % maxAlbum
-    albumNumberInc3 = ( albumNumber + 3 ) % maxAlbum
-    outputToDisplay(albumList[albumNumber],albumList[albumNumberInc1],albumList[albumNumberInc2],albumList[albumNumberInc3])
+    outputToDisplay(" " + albumList[albumNumberDec1],albumList[albumNumber]," " + albumList[albumNumberInc1]," " + albumList[albumNumberInc2])
     
 def displayArtistList(artistNumber):
     global artistList
     maxArtist = len(artistList)
+    artistNumberDec1 = ( artistNumber -1 ) % maxArtist
     artistNumber = artistNumber % maxArtist
     artistNumberInc1 = ( artistNumber + 1 ) % maxArtist
     artistNumberInc2 = ( artistNumber + 2 ) % maxArtist
-    artistNumberInc3 = ( artistNumber + 3 ) % maxArtist
-    outputToDisplay(artistList[artistNumber],artistList[artistNumberInc1],artistList[artistNumberInc2],artistList[artistNumberInc3])
+    outputToDisplay(" " + artistList[artistNumberDec1],artistList[artistNumber]," " + artistList[artistNumberInc1]," " + artistList[artistNumberInc2])
 
 def browseMusic(trackNum, browseMode, deltaValue):
     global tracks, albumList, artistList, albumDictionary, artistDictionary
@@ -1082,7 +1082,25 @@ while True:
 
 
         # check for VOLUP or VOLDN key when stopped
-        if buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
+        if buttonVOLUP.is_pressed and buttonVOLDN.is_pressed:
+            debugMsg("button VOLUP and VOLDN PUSHEDat same time")
+            outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", "")
+            decisionMade = False
+            loopsRemaining = 50
+            while loopsRemaining and not decisionMade:
+                if buttonPLAY.is_pressed:
+                    outputToDisplayFlashing("SHUTTING DOWN...", "", "", "")
+                    time.sleep(2)
+                    outputToDisplay("", "", "", "")
+                    MP3_Play = 0
+                    radio = 0
+                    time.sleep(1)
+                    os.system("sudo shutdown -h now")
+                if buttonPREV.is_pressed:
+                    decisionMade = True
+                loopsRemaining -= 1
+                sleep(0.1)
+        elif buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
             debugMsg("button VOLUP/VOLDN PUSHED/HELD")
             if Disp_on == 0:
                 Disp_on = 1
@@ -1091,6 +1109,9 @@ while True:
                 time.sleep(0.5)
             Set_Volume()
             time.sleep(0.5)
+
+
+
 
 
                 
