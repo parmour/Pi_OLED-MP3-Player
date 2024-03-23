@@ -486,11 +486,12 @@ def addToTrackHistory(trackNum):
     debugMsg(trackHistory)
 
 def selectPrevTrack(trackNum):
-    global trackHistory, player_mode
+    global trackHistory, player_mode, tracks
     debugMsg("PREV Player Mode: " + str(player_mode))
     debugMsg("PREV Supplied Track Num: " + str(trackNum))
-    # use and remove the penultimate track from history
-    if trackHistory:
+    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
+    # if in rand tracks use and remove the penultimate track from history    
+    if player_mode == 2 and trackHistory:
         trackHistoryLast = len(trackHistory) -1
         trackNum = trackHistory.pop(trackHistoryLast) # ignore the final entry since that will be the current track
         trackHistoryLast = len(trackHistory) -1
@@ -498,13 +499,10 @@ def selectPrevTrack(trackNum):
             trackNum = trackHistory.pop(trackHistoryLast)   # use last item in track history then remove it
             debugMsg("PREV New Track Num: " + str(trackNum))
             return trackNum
-    # if no track history left, and in an album mode go to start of current album
-    if player_mode < 3:
-        ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
-        debugMsg("PREV New Track Num: " + str(trackNum))
-        return currentAlbumFirst
-        
-        
+    # otherwise, if in doubt just go to the previous track on file    
+    maxTrack = len(tracks) - 1
+    trackNum = ( trackNum -1 ) % maxTrack
+    return trackNum
 
                             
 
@@ -569,20 +567,20 @@ def displayArtistList(artistNumber):
 def browseMusic(trackNum, browseMode, deltaValue):
     global tracks, albumList, artistList, albumDictionary, artistDictionary
     if browseMode == "Track":
-        displayTrackList(trackNum)
         trackNum = ( trackNum + deltaValue ) % len(tracks)
+        displayTrackList(trackNum)
         return trackNum
     if browseMode == "Album":
         albumNumber = getAlbumNum(trackNum)
-        displayAlbumList(albumNumber)
         albumNumber = ( albumNumber + deltaValue ) % len(albumList)
+        displayAlbumList(albumNumber)
         albumName = albumList[albumNumber]
         (albumStart, albumFinish) = albumDictionary[albumName]
         return albumStart
     if browseMode == "Artist":
         artistNumber = getArtistNum(trackNum)
-        displayArtistList(artistNumber)
         artistNumber = ( artistNumber + deltaValue ) % len(artistList)
+        displayArtistList(artistNumber)
         artistName = artistList[artistNumber]
         (artistStart, artistFinish) = artistDictionary[artistName]
         return artistStart
@@ -612,7 +610,7 @@ def add_removeCurrentAlbumFavs(trackNum):
 
 def Set_Volume():
     global mixername,m,MP3_Play,radio,radio_stn,volume,gapless
-    while buttonVOLUP.is_pressed:
+    while buttonVOLUP.is_pressed and not buttonVOLDN.is_pressed:
         volume +=1
         volume = min(volume,100)
         m.setvolume(volume)
@@ -620,7 +618,7 @@ def Set_Volume():
         os.system("amixer -D pulse sset Master " + str(volume) + "%")
         if mixername == "DSP Program":
             os.system("amixer set 'Digital' " + str(volume + 107))
-    while buttonVOLDN.is_pressed:
+    while buttonVOLDN.is_pressed and not buttonVOLUP.is_pressed:
         volume -=1
         volume = max(volume,0)
         m.setvolume(volume)
@@ -974,7 +972,9 @@ while True:
                         writeDefaults()
                 elif buttonPLAY_action == "HOLD":   # released after hold
                     # player mode is not radio and rand tracks
+                    debugMsg("buttonPLAY: released after HOLD")
                     if player_mode == 0 or player_mode == 1:
+                        debugMsg("Choose next favourite album.")
                         Track_No = goToNextFavourite()   # play from start of favourites
                         (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                         stimer = getRemainingAlbumTime(Track_No) 
@@ -983,8 +983,8 @@ while True:
                         writeDefaults()
                 buttonPLAY_action = ""
             else:   # actions when button held               
-                buttonPLAY_action = "HOLD"
-
+                if (time.monotonic() - buttonPLAY_timer) > buttonHold:
+                    buttonPLAY_action = "HOLD"
         else:                
             if buttonPLAY.is_pressed:   # actions when button held
                 buttonPLAY_action = "PUSH"
@@ -1083,7 +1083,7 @@ while True:
 
         # check for VOLUP or VOLDN key when stopped
         if buttonVOLUP.is_pressed and buttonVOLDN.is_pressed:
-            debugMsg("button VOLUP and VOLDN PUSHEDat same time")
+            debugMsg("button VOLUP and VOLDN PUSHED at same time")
             outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", "")
             decisionMade = False
             loopsRemaining = 50
@@ -1099,7 +1099,7 @@ while True:
                 if buttonPREV.is_pressed:
                     decisionMade = True
                 loopsRemaining -= 1
-                sleep(0.1)
+                time.sleep(0.1)
         elif buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
             debugMsg("button VOLUP/VOLDN PUSHED/HELD")
             if Disp_on == 0:
@@ -1549,9 +1549,11 @@ while True:
                         os.killpg(p.pid, SIGTERM)                        
                         if buttonNEXT_action == "PUSH":
                             # push action
+                            outputToDisplayFlashing("", "> NEXT TRACK", "", "")
                             Track_No = selectNextTrack(Track_No)
                         elif buttonNEXT_action == "HOLD":
                             # hold action
+                            outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
                             Track_No = goToNextAlbum(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
@@ -1585,9 +1587,11 @@ while True:
                         os.killpg(p.pid, SIGTERM)                        
                         if buttonPREV_action == "PUSH":
                             # push action
+                            outputToDisplayFlashing("", "> PREV TRACK", "", "")
                             Track_No = selectPrevTrack(Track_No)
                         elif buttonPREV_action == "HOLD":
                             # hold action
+                            outputToDisplayFlashing("", "> PREV ALBUM", "", "")
                             Track_No = goToPrevAlbum(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
