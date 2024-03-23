@@ -73,6 +73,8 @@ myUsername   = "philip"   # os.getlogin() not always working when script run aut
 buttonHold   = 0.7    # number of seconds you need to hold keys to get different behaviour
 numModes     = 4
 
+
+
 baseDir = "/home/" + myUsername
 
 Radio_Stns = ["Radio Paradise Rock","http://stream.radioparadise.com/rock-192",
@@ -259,6 +261,17 @@ def outputToDisplayFlashing(dispLine1,dispLine2,dispLine3,dispLine4):
         time.sleep(0.2)
     time.sleep(1)
 
+def outputToDisplayRand(dispText):
+    vp = random.randint(0,3)
+    if vp == 0:
+        outputToDisplay(dispText, "", "", "")
+    elif vp == 1:
+        outputToDisplay("", dispText, "", "")
+    elif vp == 2:
+        outputToDisplay("", "", dispText, "")
+    elif vp == 3:
+        outputToDisplay("", "", "", dispText)
+
 outputToDisplay("MP3 Player: v" + version, "", "", "")
 time.sleep(2)
 stop = 0
@@ -432,11 +445,31 @@ def getSingleLineSongDetails(trackNum):
 
 def goToNextFavourite():
     global favouritesIndex, albumDictionary, albumList
+    debugMsg("NEXT Fav starting index: " + str(favouritesIndex))
     if len(albumFavourites) > 0:
         nextFav = albumFavourites[favouritesIndex]
         nextUniqAlbum = albumList[nextFav]
         ( favAlbumFirst, favAlbumLast) = albumDictionary[nextUniqAlbum]
         favouritesIndex = (favouritesIndex + 1) % len(albumFavourites)
+        debugMsg("NEXT Fav finishing index: " + str(favouritesIndex))
+        return favAlbumFirst
+    else:
+        return 0
+
+def goToPrevFavourite():
+    global favouritesIndex, albumDictionary, albumList
+    debugMsg("PREV Fav starting index: " + str(favouritesIndex))
+    # favouritesIndex is +1 from currently playing favourite
+    if len(albumFavourites) > 0:
+        if favouritesIndex > 1:
+            favouritesIndex = favouritesIndex - 2
+        else:
+            favouritesIndex = 0
+        prevFav = albumFavourites[favouritesIndex]
+        prevUniqAlbum = albumList[prevFav]
+        ( favAlbumFirst, favAlbumLast) = albumDictionary[prevUniqAlbum]
+        favouritesIndex = (favouritesIndex + 1) % len(albumFavourites)
+        debugMsg("PREV Fav finishing index: " + str(favouritesIndex))
         return favAlbumFirst
     else:
         return 0
@@ -592,16 +625,15 @@ def add_removeCurrentAlbumFavs(trackNum):
     debugMsg("indexToRemove: " + str(indexToRemove))
     if indexToRemove == -1:
         albumFavourites.append(albumNum)
-        outputToDisplay("", "Album + to Favs", "", "")
+        outputToDisplayFlashing("", "Album + to Favs", "", "")
         debugMsg("Album: " + str(albumNum) + " added to Favourites")
         debugMsg(albumFavourites)
-        time.sleep(1)
     else:
         albumFavourites.remove(albumNum)
-        outputToDisplay("", "Album - From Favs", "", "")
+        outputToDisplayFlashing("", "Album - From Favs", "", "")
         debugMsg("Album: " + str(albumNum) + " removed from Favourites")
         debugMsg(albumFavourites)
-        time.sleep(1)
+    outputToDisplay("", "", "", "")
     writeFavourites()
 
 
@@ -854,27 +886,11 @@ while True:
             except:
                 pass
             
-        # display Artist / Album / Track names
+        # display Track
         if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not (chooseFavsActive or browseActive):
             timer1 = time.monotonic()
-            if xt < 2:
-                showTrackProgress(Track_No, "STOP", -1) 
-            elif xt == 2:
-                outputToDisplay("", "", "", "Status...  "  +  playerStatus(player_mode))
-            elif xt == 3 and show_clock == 1 and synced == 1:
-                now = datetime.datetime.now()
-                clock = now.strftime("%H:%M:%S")
-                outputToDisplay(clock, "", "", "")
-            elif xt == 4:
-                outputToDisplay("Volume: " + str(volume), "", "", "")
-            elif xt == 5 and sleep_timer != 0:
-                time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                outputToDisplay("", "", "","SLEEP: " + str(time_left) + " mins")
-            else:
-                xt +=1
-            xt +=1
-            if xt > 5:
-                xt = 0
+            showTrackProgress(Track_No, "STOP", -1) 
+
 
         # display clock (if enabled and synced)
         if (show_clock == 1 and Disp_on == 0 and synced == 1 and stopped == 0 and abort_sd == 1) and not (chooseFavsActive or browseActive):
@@ -886,15 +902,7 @@ while True:
                 t += " "
             clock = t + clock
             if secs != old_secs2 :
-                vp = random.randint(0,3)
-                if vp == 0:
-                    outputToDisplay(clock, "", "", "")
-                elif vp == 1:
-                    outputToDisplay("", clock, "", "")
-                elif vp == 2:
-                    outputToDisplay("", "", clock, "")
-                elif vp == 3:
-                    outputToDisplay("", "", "", clock)
+                outputToDisplayRand(clock)
                 old_secs2 = secs
 
         # DISPLAY OFF timer
@@ -972,15 +980,26 @@ while True:
                         writeDefaults()
                 elif buttonPLAY_action == "HOLD":   # released after hold
                     # player mode is not radio and rand tracks
+                    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
                     debugMsg("buttonPLAY: released after HOLD")
-                    if player_mode == 0 or player_mode == 1:
-                        debugMsg("Choose next favourite album.")
-                        Track_No = goToNextFavourite()   # play from start of favourites
+                    if player_mode == 0:
+                        debugMsg("Choose first favourite album.")
+                        outputToDisplayFlashing("", "START ALBUM FAVS" , "", "")
+                        Track_No = goToNextFavourite()   # play from start of next favourite
                         (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                         stimer = getRemainingAlbumTime(Track_No) 
                         MP3_Play = 1
                         radio    = 0
                         writeDefaults()
+                    elif player_mode == 1:
+                        debugMsg("Choose next random album.")
+                        outputToDisplayFlashing("", "NEXT RAND ALBUM" , "", "")
+                        Track_No = goToRandomAlbum()   # play from start of next random album
+                        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                        stimer = getRemainingAlbumTime(Track_No) 
+                        MP3_Play = 1
+                        radio    = 0
+                        writeDefaults()                        
                 buttonPLAY_action = ""
             else:   # actions when button held               
                 if (time.monotonic() - buttonPLAY_timer) > buttonHold:
@@ -1264,15 +1283,7 @@ while True:
             if secs != old_secs:
                 if sleep_timer > 0:
                     clock = clock + " " + str(time_left)
-                vp = random.randint(0,3)
-                if vp == 0:
-                    outputToDisplay(clock, "", "", "")
-                elif vp == 1:
-                    outputToDisplay("", clock, "", "")
-                elif vp == 2:
-                    outputToDisplay("", "", clock, "")
-                elif vp == 3:
-                    outputToDisplay("", "", "", clock)
+                outputToDisplayRand(clock)
                 old_secs = secs
             
          # check for VOLDN  key
@@ -1458,15 +1469,7 @@ while True:
                     if sleep_timer > 0:
                         clock += " " + str(time_left)
                     if secs != old_secs2 :
-                        vp = random.randint(0,3)
-                        if vp == 0:
-                            outputToDisplay(clock, "", "", "")
-                        elif vp == 1:
-                            outputToDisplay("", clock, "", "")
-                        elif vp == 2:
-                            outputToDisplay("", "", clock, "")
-                        elif vp == 3:
-                            outputToDisplay("", "", "", clock)
+                        outputToDisplayRand(clock)
                         old_secs2 = secs
                   
                 time.sleep(0.2)
@@ -1480,36 +1483,12 @@ while True:
                     Disp_on = 0
 
              
-                # display titles, status etc
+                # display track progress etc
                 if time.monotonic() - timer1 > 2 and Disp_on == 1:
                     timer1    = time.monotonic()
                     played_pc =  "     " + str(played_pc)
-                    if xt < 2:
-                        showTrackProgress(Track_No, "PLAY", played_pc)
-                    elif xt == 2:
-                        outputToDisplay("", "", "", "Status...  " +  playerStatus(player_mode))
-                    elif xt == 4 and sleep_timer != 0:
-                        time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
-                        outputToDisplay("", "", "","SLEEP: " + str(time_left) + " mins")
-                    elif xt == 5 and show_clock == 1 and synced == 1:
-                        now = datetime.datetime.now()
-                        clock = now.strftime("%H:%M:%S")
-                        outputToDisplay(clock, "", "", "")
-                    elif xt == 3:
-                        pmin = int(played/60)
-                        psec = int(played - (pmin * 60))
-                        psec2 = str(psec)
-                        if psec < 10:
-                            psec2 = "0" + psec2
-                        lmin = int(track_len/60)
-                        lsec = int(track_len - (lmin * 60))
-                        lsec2 = str(lsec)
-                        if lsec < 10:
-                            lsec2 = "0" + lsec2
-                        outputToDisplay("", "", ""," " + str(pmin) + ":" + str(psec2) + " of " + str(lmin) + ":" + str(lsec2))
-                    xt +=1
-                    if xt > 5:
-                        xt = 0
+                    showTrackProgress(Track_No, "PLAY", played_pc)
+
   
   
                 ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
@@ -1553,8 +1532,15 @@ while True:
                             Track_No = selectNextTrack(Track_No)
                         elif buttonNEXT_action == "HOLD":
                             # hold action
-                            outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
-                            Track_No = goToNextAlbum(Track_No)
+                            if player_mode == 0:   # Album Favs
+                                outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                Track_No = goToNextFavourite()
+                            elif player_mode == 1:   # Album Rand
+                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                Track_No = goToRandomAlbum()
+                            else:
+                                outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
+                                Track_No = goToNextAlbum(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
                         buttonNEXT_action = ""
@@ -1589,10 +1575,16 @@ while True:
                             # push action
                             outputToDisplayFlashing("", "> PREV TRACK", "", "")
                             Track_No = selectPrevTrack(Track_No)
-                        elif buttonPREV_action == "HOLD":
-                            # hold action
-                            outputToDisplayFlashing("", "> PREV ALBUM", "", "")
-                            Track_No = goToPrevAlbum(Track_No)
+                        elif buttonPREV_action == "HOLD":  # hold action
+                            if player_mode == 0:   # Album Favs
+                                outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                Track_No = goToPrevFavourite()
+                            elif player_mode == 1:   # Album Rand
+                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                Track_No = goToRandomAlbum()
+                            else:                            
+                                outputToDisplayFlashing("", "> PREV ALBUM", "", "")
+                                Track_No = goToPrevAlbum(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
                         buttonPREV_action = ""
@@ -1661,81 +1653,7 @@ while True:
                 Track_No = selectNextTrack(Track_No)
         
 
-"""
-        # check for FAVMODE key when stopped
-        if  buttonFAVMODE.is_pressed:
-            debugMsg("buttonFAVMODE PUSH")
-            if Disp_on == 0:
-                Disp_on = 1
-                Disp_start = time.monotonic()
-                showTrackProgress(Track_No, "STOP", -1)
-                time.sleep(0.5)
-                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
-            buttonFAVMODE_timer = time.monotonic()
-            while buttonFAVMODE.is_pressed and time.monotonic() - buttonFAVMODE_timer < buttonHold:
-                pass
-            if time.monotonic() - buttonFAVMODE_timer < buttonHold:
-                debugMsg("buttonFAVMODE HOLD")
-                ################
-                # Rotate through Modes  !!!
-                ##############
-                player_mode += 1
-                player_mode = ( player_mode % numModes )
-                outputToDisplay("", playerModeNames[player_mode] + "   " , "", "")
-                if player_mode == 0:   # Album Favs
-                    radio = 0
-                    MP3_play = 1
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                elif player_mode == 1:   # Album Rand
-                    radio = 0
-                    MP3_play = 1                   
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                elif player_mode == 2:   # Rand Tracks
-                    radio = 0
-                    MP3_play = 1                  
-                    Track_No = selectNextTrack(Track_No)
-                    writeDefaults()
-                else:     # Radio
-                    radio = 1
-                    MP3_play = 0
-                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
-                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
-                    rs = Radio_Stns[radio_stn] + "               "[0:19]
-                    writeDefaults()
-                # SHUTDOWN IF PRESSED FOR 10 SECONDS
-                sleep_timer +=900
-                if sleep_timer > 7200:
-                    sleep_timer = 0
-                sleep_timer_start = time.monotonic()
-                outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "HOLD for 10 to SHUTDOWN ", "", "")
-                time.sleep(0.25)
-                while buttonFAVMODE.is_pressed:
-                    debugMsg("buttonFAVMODE HOLD FOR SHUTDOWN")
-                    sleep_timer +=900
-                    if sleep_timer > 7200:
-                         sleep_timer = 0
-                    sleep_timer_start = time.monotonic()
-                    outputToDisplay("Set SLEEP.. " + str(int(sleep_timer/60)), "", "", "")
-                    time.sleep(1)
-                    if time.monotonic() - buttonFAVMODE_timer > 5:
-                        outputToDisplay("", "SHUTDOWN in " + str(10-int(time.monotonic() - timer1)), "", "")
-                    if time.monotonic() - timer1 > 10:
-                        # shutdown if pressed for 10 seconds
-                        outputToDisplay("SHUTTING DOWN...", "", "", "")
-                        time.sleep(2)
-                        outputToDisplay("", "", "", "")
-                        MP3_Play = 0
-                        radio = 0
-                        time.sleep(1)
-                        os.system("sudo shutdown -h now")
-                showTrackProgress(Track_No, "STOP", -1)
-                buttonFAVMODE_timer = time.monotonic()
-                xt = 2
 
-
-"""
 
 
 
