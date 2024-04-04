@@ -20,6 +20,7 @@ SOFTWARE."""
 
 
 from gpiozero import Button
+import socket
 import glob
 import subprocess
 import os, sys
@@ -97,7 +98,19 @@ VOLUP  = 8  # (24) VOL UP                      | VOL UP
 FAVMODE = 25# (22) CURRENT ALB > FAV ADD - REM | ROTATE MODE Album Favs  Album Rand  Rand Tracks  Radio - HOLD10s = SHUTDOWN
 
 favourites_file = baseDir + "/favourites.txt"
-
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.254.254.254', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = ""
+    finally:
+        s.close()
+    return IP
+    
 def debugMsg( msgString ):
     if debugOut:
         print(msgString)
@@ -1103,7 +1116,11 @@ while True:
         # check for VOLUP or VOLDN key when stopped
         if buttonVOLUP.is_pressed and buttonVOLDN.is_pressed:
             debugMsg("button VOLUP and VOLDN PUSHED at same time")
-            outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", "")
+            ipAddrLine = "" 
+            ipAddr = get_ip()
+            if ipAddr:
+                ipAddrLine = "IP: " + str(ipAddr)
+            outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", ipAddrLine)
             decisionMade = False
             loopsRemaining = 50
             while loopsRemaining and not decisionMade:
