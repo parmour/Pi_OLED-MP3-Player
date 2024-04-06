@@ -54,6 +54,7 @@ volume       = 50   # range 0 - 100
 Track_No     = 0
 player_mode  = 0    # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
 auto_start   = 0    # start playing radio or MP3 at startup
+start_time   = 0    # poor man's pause : play resumes where last stopped
 
 new_player_mode = 0
 
@@ -73,6 +74,7 @@ gaptime      = 2    # set pre-start time for gapless, in seconds
 myUsername   = "philip"   # os.getlogin() not always working when script run automatically
 buttonHold   = 0.7    # number of seconds you need to hold keys to get different behaviour
 numModes     = 4
+activeTrack = Track_No # This holds the track num for which start_time applies
 
 
 
@@ -135,8 +137,8 @@ if os.path.exists(favourites_file):
 
 def writeDefaults():
     # config file : radio_stn, gapless, volume, Track_No, player_mode, auto_start
-    global radio_stn, gapless, volume, Track_No, player_mode, auto_start, config_file
-    defaults = [radio_stn, gapless, volume, Track_No, player_mode, auto_start]
+    global radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time
+    defaults = [radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -166,6 +168,9 @@ volume     = config[2]
 Track_No   = config[3]
 player_mode = config[4] # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
 auto_start = config[5]
+start_time = config[6]
+
+activeTrack = Track_No
 
 if auto_start:
     if player_mode == 3:  # radio
@@ -488,7 +493,7 @@ def goToPrevFavourite():
         return 0
 
 def selectNextTrack(trackNum):
-    global tracks, player_mode, favouritesIndex
+    global tracks, player_mode, favouritesIndex, activeTrack, start_time
     # 0 = Album Favs, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
     # if Rand Tracks choose another track at random which is not in the history
     debugMsg("NEXT Player Mode: " + str(player_mode))
@@ -516,6 +521,9 @@ def selectNextTrack(trackNum):
         else:
             trackNum = ( (trackNum + 1) % len(tracks) )
     debugMsg("NEXT New Track Num: " + str(trackNum))
+    activeTrack = trackNum
+    debugMsg("activeTrack: " + str(activeTrack))
+    start_time = 0
     return trackNum
 
 def addToTrackHistory(trackNum):
@@ -550,7 +558,19 @@ def selectPrevTrack(trackNum):
     trackNum = ( trackNum -1 ) % maxTrack
     return trackNum
 
-                            
+def getPlayDuration(TrackNum, startTimer):
+    global start_time
+    track_len = getTrackLen(TrackNum)
+    timeNow = time.monotonic()
+    played  = int(timeNow - startTimer)    # time duration since last pressed play (not since start of track)
+    Totalplayed  = start_time + played
+    played_pc = int((Totalplayed/track_len) *100)
+    debugMsg("getPlayDuration: track_len: " + str(track_len))
+    debugMsg("getPlayDuration: timeNow: " + str(timeNow))
+    debugMsg("getPlayDuration: played: " + str(played))
+    debugMsg("getPlayDuration: startTimer: " + str(startTimer))
+    debugMsg("getPlayDuration: played_pc: " + str(played_pc))
+    return (played, played_pc, track_len)                            
 
 
 def showTrackProgress(trackNum, playLabel, played_pc):    # ignore played_pc if = -1
@@ -568,7 +588,19 @@ def showTrackProgress(trackNum, playLabel, played_pc):    # ignore played_pc if 
     dispLine1 = playLabel + " " + str(track_n)[0:5] + "  " + progress + playerStatus(player_mode)
     outputToDisplay(dispLine1, dispLine2, dispLine3, dispLine4)
 
+def showTrackProgressEDIT(trackNum, playLabel, startTimer):
+    (played, played_pc, track_len) = getPlayDuration(trackNum, startTimer)
+    showTrackProgress(trackNum, playLabel, played_pc)
 
+def getRemainingTime(trackNum, startTimer):
+    (played, played_pc, track_len) = getPlayDuration(trackNum, startTimer)
+    remainingTime = track_len - played
+    return remainingTime
+
+def getPlayedTime(trackNum, startTimer):
+    (played, played_pc, track_len) = getPlayDuration(trackNum, startTimer)
+    debugMsg("Played Time: " + str(played))
+    return played
 
 def getAlbumNum(trackNum):
     global albumList
@@ -649,8 +681,32 @@ def add_removeCurrentAlbumFavs(trackNum):
     outputToDisplay("", "", "", "")
     writeFavourites()
 
+def getTrackLen(TrackNum):
+    track = getTrack(TrackNum)
+    audio = MP3(track)
+    track_len = audio.info.length
+    return track_len
 
 
+
+def playMP3(TrackNum):
+    global start_time, activeTrack
+    track_len = getTrackLen(TrackNum)
+    debugMsg("playMP3: activeTrack: " + str(activeTrack))
+    debugMsg("playMP3: TrackNum: " + str(TrackNum))
+    if start_time > track_len:
+        start_time = 0
+    if activeTrack != TrackNum:
+        start_time = 0
+        activeTrack = TrackNum
+    track = getTrack(TrackNum)
+    debugMsg("playMP3: track: " + str(track))
+    debugMsg("playMP3: start_time: " + str(start_time))
+    debugMsg("playMP3: new activeTrack: " + str(activeTrack))
+    rpistr = "mplayer -ss " + str(start_time) + " -quiet " +  '"' + track + '"'
+    addToTrackHistory(TrackNum)
+    p = subprocess.Popen(rpistr, shell=True, preexec_fn=os.setsid)
+    return p
 
 
 def Set_Volume():
@@ -862,7 +918,7 @@ try:
 except:
     pass
 
-Track_No = selectNextTrack(Track_No)
+#Track_No = selectNextTrack(Track_No)
 
 buttonFAVMODE_action = ""
 buttonPREV_action = ""
@@ -1449,28 +1505,22 @@ while True:
             track = getTrack(Track_No)
             if not os.path.exists (track) and stop == 0 :
                 reload()
+
+
             
         # play selected track
         if MP3_Play == 1 and len(tracks) > 0:
-            track = getTrack(Track_No)
-            rpistr = "mplayer " + " -quiet " +  '"' + track + '"'
+            p = playMP3(Track_No)
+            startPlayTimer = time.monotonic()
             if Disp_on == 1:
-                showTrackProgress(Track_No, "PLAY", played_pc)
-            audio = MP3(track)
-            track_len = audio.info.length
-            # add track to history
-            addToTrackHistory(Track_No)
-            p = subprocess.Popen(rpistr, shell=True, preexec_fn=os.setsid)
+                showTrackProgressEDIT(Track_No, "PLAY", startPlayTimer)
             poll = p.poll()
             while poll != None:
               poll = p.poll()
-            timer1 = time.monotonic()
-            xt = 0
             goToNextTrack = 1
-            played = time.monotonic() - timer1
-            
             # loop while playing selected MP3 track
-            while poll == None and track_len - played > gap and (time.monotonic() - sleep_timer_start < sleep_timer or sleep_timer == 0):
+            remainingTrackTime = getRemainingTime(Track_No, startPlayTimer)
+            while poll == None and remainingTrackTime > gap and (time.monotonic() - sleep_timer_start < sleep_timer or sleep_timer == 0):
                 time_left = int((sleep_timer - (time.monotonic() - sleep_timer_start))/60)
                   
                 # display clock (if enabled and synced)
@@ -1491,8 +1541,6 @@ while True:
                   
                 time.sleep(0.2)
   
-                played  = time.monotonic() - timer1
-                played_pc = int((played/track_len) *100)
   
                 # DISPLAY OFF timer
                 if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
@@ -1501,10 +1549,9 @@ while True:
 
              
                 # display track progress etc
-                if time.monotonic() - timer1 > 2 and Disp_on == 1:
-                    timer1    = time.monotonic()
-                    played_pc =  "     " + str(played_pc)
-                    showTrackProgress(Track_No, "PLAY", played_pc)
+                #if played > 2 and Disp_on == 1:
+                #    (played, played_pc, track_len) = getPlayDuration(Track_No, startPlayTimer)
+                #    showTrackProgress(Track_No, "PLAY", played_pc)
 
   
   
@@ -1517,6 +1564,9 @@ while True:
                     debugMsg("buttonPLAY PUSH")
                     Disp_on = 1
                     Disp_start = time.monotonic()
+                    start_time = start_time + getPlayedTime(Track_No, startPlayTimer)
+                    if start_time > 5:
+                        start_time -= 5
                     os.killpg(p.pid, SIGTERM)
                     outputToDisplay("Track Stopped", "", "", "")
                     time.sleep(2)
@@ -1668,6 +1718,7 @@ while True:
             
             if goToNextTrack == 1:
                 Track_No = selectNextTrack(Track_No)
+
         
 
 
