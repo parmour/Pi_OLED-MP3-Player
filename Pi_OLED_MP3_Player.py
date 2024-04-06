@@ -68,13 +68,15 @@ use_USB      = 0    # set to 0 if you ONLY use /home/pi/Music/... on SD card
 usb_timer    = 6   # seconds to find USB present
 sleep_timer  = 0    # sleep_timer timer in minutes, use 15,30,45,60 etc...set to 0 to disable
 sleep_shutdn = 0    # set to 1 to shutdown Pi when sleep times out
-Disp_timer   = 60   # Display timeout in seconds, set to 0 to disable
+Disp_timer   = 15   # Display timeout in seconds, set to 0 to disable
 show_clock   = 0    # set to 1 to show clock, only use if on web or using RTC
 gaptime      = 2    # set pre-start time for gapless, in seconds
 myUsername   = "philip"   # os.getlogin() not always working when script run automatically
 buttonHold   = 0.7    # number of seconds you need to hold keys to get different behaviour
 numModes     = 4
 activeTrack = Track_No # This holds the track num for which start_time applies
+Disp_counter = 0
+Disp_interval = 10   # how many loops between showing track info
 
 
 
@@ -1512,8 +1514,9 @@ while True:
         if MP3_Play == 1 and len(tracks) > 0:
             p = playMP3(Track_No)
             startPlayTimer = time.monotonic()
-            if Disp_on == 1:
-                showTrackProgressEDIT(Track_No, "PLAY", startPlayTimer)
+            Disp_on = 1
+            Disp_start = time.monotonic()
+            showTrackProgressEDIT(Track_No, "PLAY", startPlayTimer)
             poll = p.poll()
             while poll != None:
               poll = p.poll()
@@ -1546,6 +1549,13 @@ while True:
                 if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
                     outputToDisplay("", "", "", "")
                     Disp_on = 0
+                
+
+                if Disp_on:
+                    if (Disp_counter  % Disp_interval) == 0:
+                        showTrackProgressEDIT(Track_No, "PLAY", startPlayTimer)
+                        Disp_counter = 0
+                    Disp_counter += 1
 
              
                 # display track progress etc
@@ -1696,6 +1706,8 @@ while True:
                         debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
                         if buttonFAVMODE_action == "PUSH":
                             # add current album to favourites
+                            Disp_on = 1
+                            Disp_start = time.monotonic()
                             add_removeCurrentAlbumFavs(Track_No)
                         buttonFAVMODE_action = ""
                 else:                
@@ -1717,6 +1729,8 @@ while True:
                 poll = p.poll()
             
             if goToNextTrack == 1:
+                Disp_on = 1
+                Disp_start = time.monotonic()
                 Track_No = selectNextTrack(Track_No)
 
         
