@@ -589,10 +589,11 @@ def showTrackProgress(trackNum, playLabel, played_pc):    # ignore played_pc if 
     global player_mode
     (remainTracks, currentTrack) = getAlbumTracksInfo(trackNum)
     (dispLine2, dispLine3, dispLine4) = getSongDetails(trackNum)
+    totalTracks = currentTrack + remainTracks
     if player_mode == 2:
         track_n = str(trackNum + 1) + "     "
     else:
-        track_n = str(currentTrack) + "/" + str(remainTracks)
+        track_n = str(currentTrack) + "/" + str(totalTracks)
     if played_pc != -1:
         progress = str(played_pc)[-2:] + "% "
     else:
@@ -1102,18 +1103,20 @@ while True:
                 Track_No = browseMusic(Track_No, browseMode, 1)
                 buttonNEXT_action = ""
                 browseActive = True
+                Disp_timer = 35     # keep display on longer while browsing
                 playFavourites = False
                 browseTimer = time.monotonic()
             else:   # actions when button held
                 buttonNEXT_action = "HOLD"
                 buttonNEXT_holdtime = time.monotonic() - buttonNEXT_timer 
-                if buttonNEXT_holdtime > (buttonHold + 3) and browseMode == "Track":  # after holding 3 seconds start browsing albums
+                if buttonNEXT_holdtime > (buttonHold + 2) and browseMode == "Track":  # after holding 2 seconds start browsing albums
                     browseMode = "Album"
-                if buttonNEXT_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
+                if buttonNEXT_holdtime > (buttonHold + 4) and browseMode == "Album":  # after holding 4 seconds start browsing artists
                     browseMode = "Artist"
                 if int((buttonNEXT_holdtime / 0.3)) % 2:
                     Track_No = browseMusic(Track_No, browseMode, 1)
                     browseActive = True
+                    Disp_timer = 35     # keep display on longer while browsing
                     playFavourites = False
                     browseTimer = time.monotonic()
         else:                
@@ -1123,7 +1126,7 @@ while True:
                 if (time.monotonic() - buttonNEXT_timer) > buttonHold:
                     buttonNEXT_action = "HOLD"
 
-        if browseActive and (time.monotonic() - browseTimer) > 1:
+        if browseActive and (time.monotonic() - browseTimer) > 3:
             if browseMode == "Artist":
                 browseMode = "Album"
                 browseTimer = time.monotonic()
@@ -1132,6 +1135,9 @@ while True:
                 browseTimer = time.monotonic()
             elif browseMode == "Track":              
                 browseActive = False
+
+        if Disp_timer != 15 and not browseActive:
+            Disp_timer = 15     # revert display timout length
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
@@ -1146,6 +1152,7 @@ while True:
                 Track_No = browseMusic(Track_No, browseMode, -1)
                 buttonPREV_action = ""
                 browseActive = True
+                Disp_timer = 35     # keep display on longer while browsing
                 playFavourites = False
                 browseTimer = time.monotonic()
             else:   # actions when button held
@@ -1158,6 +1165,7 @@ while True:
                 if int((buttonPREV_holdtime / 0.3)) % 2:
                     Track_No = browseMusic(Track_No, browseMode, -1)
                     browseActive = True
+                    Disp_timer = 35     # keep display on longer while browsing
                     playFavourites = False
                     browseTimer = time.monotonic()
         else:                
