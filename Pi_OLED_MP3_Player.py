@@ -1624,14 +1624,22 @@ while True:
                         elif buttonNEXT_action == "HOLD":
                             # hold action
                             if player_mode == 0:   # Album
-                                outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
-                                Track_No = goToNextFavourite()
+                                if playFavourites:
+                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                    Track_No = goToNextFavourite()
+                                else:
+                                    outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
+                                    Track_No = goToNextAlbum(Track_No)
                             elif player_mode == 1:   # Album Rand
-                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
-                                Track_No = goToRandomAlbum()
+                                if playFavourites:
+                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                    Track_No = goToNextFavourite()
+                                else:
+                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                    Track_No = goToRandomAlbum()
                             else:
-                                outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
-                                Track_No = goToNextAlbum(Track_No)
+                                outputToDisplayFlashing("", "> NEXT TRACK", "", "")
+                                Track_No = selectNextTrack(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
                         buttonNEXT_action = ""
@@ -1668,14 +1676,22 @@ while True:
                             Track_No = selectPrevTrack(Track_No)
                         elif buttonPREV_action == "HOLD":  # hold action
                             if player_mode == 0:   # Album
-                                outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
-                                Track_No = goToPrevFavourite()
+                                if playFavourites:
+                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                    Track_No = goToPrevFavourite()
+                                else:
+                                    outputToDisplayFlashing("", "> PREV ALBUM", "", "")
+                                    Track_No = goToPrevAlbum(Track_No)                                    
                             elif player_mode == 1:   # Album Rand
-                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
-                                Track_No = goToRandomAlbum()
+                                if playFavourites:
+                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                    Track_No = goToPrevFavourite()
+                                else:
+                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                    Track_No = goToRandomAlbum()
                             else:                            
-                                outputToDisplayFlashing("", "> PREV ALBUM", "", "")
-                                Track_No = goToPrevAlbum(Track_No)
+                                outputToDisplayFlashing("", "> PREV TRACK", "", "")
+                                Track_No = selectPrevTrack(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
                         buttonPREV_action = ""
