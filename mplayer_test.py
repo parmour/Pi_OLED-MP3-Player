@@ -5,6 +5,9 @@ import os
 from gpiozero import Button
 import time
 from subprocess import Popen, PIPE, CalledProcessError
+from multiprocessing import Process
+from multiprocessing import Queue
+from queue import Empty
 
 mplayer = "/usr/bin/mplayer"
 
@@ -29,11 +32,8 @@ def mplayerCommand(someCommand):
     with open(fifo_file, 'w') as fifo:
         fifo.write(someCommand)
 
-
-def main():
-
+def mplayer_play(queue):
     cmd = [mplayer, '-slave',  '-playlist', '/home/philip/temp_playlist.txt','-input'  ,'file=%s' % (fifo_file)] 
-    print(cmd)
 
     playCounter = 0
 
@@ -42,22 +42,44 @@ def main():
             playCounter += 1
             #print(line, end='') # process line here
             if "Playing" in str(line):
-                print("EVENT: playing")
+                statusString = "EVENT: playing"
+                queue.put(statusString)
             if "A:  " in str(line):
                 if ((playCounter % 20) == 0):
                     timeElapsed = line.split()[1]
-                    print("Time Elapsed: " + str(timeElapsed))
-            if buttonPLAY.is_pressed:
-                mplayerCommand("pause\n")
+                    statusString = "Time Elapsed: " + str(timeElapsed)
+                    queue.put(statusString)
 
-            if buttonNEXT.is_pressed:
-                mplayerCommand(">")
+def pullValueFromQ(queue):
+    try:
+        item = queue.get(timeout=0.1)
+    except Empty:
+        return ""
+    return item
+
+def main():
+
+    statusQueue = Queue()
+
+    mplayer_process = Process(target=mplayer_play, args=(statusQueue,))
+    mplayer_process.start()
+
+    while True:
+        statusMplayer = pullValueFromQ(statusQueue)
+        if statusMplayer:
+            print(statusMplayer)
+        if buttonPLAY.is_pressed:
+            mplayerCommand("stop\n")
+            break
+
+        if buttonNEXT.is_pressed:
+            mplayerCommand("pt_step 1\n")
                 
-            if buttonPREV.is_pressed:
-                mplayerCommand("<")
+        if buttonPREV.is_pressed:
+            mplayerCommand("pt_step -1\n")        
 
-    if p.returncode != 0:
-        raise CalledProcessError(p.returncode, p.args)
+    mplayer_process.join()
+
 
 
 if __name__ == '__main__':
