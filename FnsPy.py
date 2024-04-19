@@ -33,9 +33,18 @@ draw.rectangle((0,0,width,height), outline=0, fill=0)
 top = -2
 font = ImageFont.load_default()
 
+albumList = []    #   list of all albums in order    Because album names might not be unique, format is "AlbumName - Artist"
+artistList = []   #   list of all artists in order
+albumDictionary = {}   #  key is album ("AlbumName - Artist"), value is (first track number, last track number)
+artistDictionary = {}   #  key is artist, value is (first track number, last track number)
+
+tracks = None
+
+def getNumTracks():
+    return len(tracks)
 
 def getTrack(trackNum):
-    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = VarsGlobal.tracks[trackNum].split("/")
+    titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = tracks[trackNum].split("/")
     trackData = titles[3] + "/" + titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2]
     return trackData
 
@@ -71,11 +80,10 @@ def outputToDisplayRand(dispText):
     elif vp == 3:
         outputToDisplay("", "", "", dispText)
 
-def reload():
-  global Track_No,stop
+def reload(stop):
   if stop == 0:
-    VarsGlobal.tracks  = []
-    outputToDisplay("Tracks: " + str(len(VarsGlobal.tracks)),"Reloading tracks... ", "", "")
+    tracks  = []
+    outputToDisplay("Tracks: " + str(len(tracks)),"Reloading tracks... ", "", "")
     usb_tracks  = glob.glob("/media/" + h_user[0] + "/*/*/*/*.mp3")
     sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
     titles = [0,0,0,0,0,0,0]
@@ -83,38 +91,36 @@ def reload():
       for xx in range(0,len(sd_tracks)):
         titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = sd_tracks[xx].split("/")
         track = titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2] + "/" + titles[3]
-        VarsGlobal.tracks.append(track)
+        tracks.append(track)
     if len(usb_tracks) > 0:
       for xx in range(0,len(usb_tracks)):
         titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = usb_tracks[xx].split("/")
         track = titles[4] + "/" + titles[5] + "/" + titles[6] + "/" + titles[0] + "/" + titles[1] + "/" + titles[2] + "/" + titles[3]
-        VarsGlobal.tracks.append(track)
-    if len(VarsGlobal.tracks) > 0:
-        VarsGlobal.tracks.sort()
+        tracks.append(track)
+    if len(tracks) > 0:
+        tracks.sort()
     with open(baseDir + "/tracks.txt", 'w') as f:
-        for item in VarsGlobal.tracks:
+        for item in tracks:
             f.write("%s\n" % item)
-    Track_No = 0
-    outputToDisplay("Tracks: " + str(len(VarsGlobal.tracks)),"", "", "")
-    if len(VarsGlobal.tracks) == 0:
-        outputToDisplay("Tracks: " + str(len(VarsGlobal.tracks)), "Stopped Checking")
+    Track_Num = 0
+    outputToDisplay("Tracks: " + str(len(tracks)),"", "", "")
+    if len(tracks) == 0:
+        outputToDisplay("Tracks: " + str(len(tracks)), "Stopped Checking")
         stop = 1
     time.sleep(1)
+    return Track_Num
 
 def loadTrackDictionaries():
     global albumDictionary, artistDictionary, albumList, artistList
-    albumList = []    #   list of all albums in order    Because album names might not be unique, format is "AlbumName - Artist"
-    artistList = []   #   list of all artists in order
-    albumDictionary = {}   #  key is album ("AlbumName - Artist"), value is (first track number, last track number)
-    artistDictionary = {}   #  key is artist, value is (first track number, last track number)
+
     currentArtist = ""
     currentArtistFirst = 0
     currentArtistLast = 0
     currentAlbum = ""
     currentAlbumFirst = 0
     currentAlbumLast = 0
-    for trackNum in range(0,len(VarsGlobal.tracks)):
-        ( artist, album, song, path1, path2, path3, path4 ) = VarsGlobal.tracks[trackNum].split("/")
+    for trackNum in range(0,len(tracks)):
+        ( artist, album, song, path1, path2, path3, path4 ) = tracks[trackNum].split("/")
         uniqAlbum = album + " - " + artist   # Because album names might not be unique, format is "AlbumName - Artist"
         if artist not in artistList:
             artistList.append(artist)
@@ -146,7 +152,7 @@ def loadTrackDictionaries():
         albumDictionary[currentAlbum] = ( currentAlbumFirst, currentAlbumLast)
 
 def getArtistAlbumSongNames(trackNum):
-    ( artist, album, song, path1, path2, path3, path4 ) = VarsGlobal.tracks[trackNum].split("/")
+    ( artist, album, song, path1, path2, path3, path4 ) = tracks[trackNum].split("/")
     return ( artist, album, song )
 
 def getAlbumStartFinish(trackNum):
@@ -178,14 +184,14 @@ def getRemainingAlbumTime(trackNum):
 def goToNextAlbum(trackNum):
     ( currentAlbumFirst, currentAlbumLast) = getAlbumStartFinish(trackNum)
     nextAlbumStart = currentAlbumLast + 1
-    if nextAlbumStart > len(VarsGlobal.tracks):
+    if nextAlbumStart > len(tracks):
         nextAlbumStart = 0
     return nextAlbumStart
 
 def goToNextArtist(trackNum):
     ( currentArtistFirst, currentArtistLast) = getArtistStartFinish(trackNum)
     nextArtistStart = currentArtistLast + 1
-    if nextArtistStart > len(VarsGlobal.tracks):
+    if nextArtistStart > len(tracks):
         nextArtistStart = 0
     return nextArtistStart
 
@@ -216,7 +222,7 @@ def goToRandomAlbum():
     return currentAlbumFirst
 
 def goToRandomTrack():
-    selectedTrackNum = random.randint(0, len(VarsGlobal.tracks) - 1)
+    selectedTrackNum = random.randint(0, len(tracks) - 1)
     return selectedTrackNum
 
 def getSongDetails(trackNum):
@@ -290,7 +296,7 @@ def selectNextTrack(trackNum):
                 if tracksRemaining == 0: # finished playing album
                     trackNum = goToNextFavourite()
                 else:
-                    trackNum = ( (trackNum + 1) % len(VarsGlobal.tracks) )
+                    trackNum = ( (trackNum + 1) % len(tracks) )
                 newTrackSelected = True
         if not newTrackSelected:
             # if in doubt go to the next track in the album, if at last track, go to next or random album depending on mode
@@ -298,11 +304,11 @@ def selectNextTrack(trackNum):
             debugMsg("P1 Tracks Remaining: " + str(tracksRemaining))
             if tracksRemaining == 0: # finished playing album
                 if player_mode == 0:
-                    trackNum = ( (trackNum + 1) % len(VarsGlobal.tracks) )   # go to next album in file seq
+                    trackNum = ( (trackNum + 1) % len(tracks) )   # go to next album in file seq
                 elif player_mode == 1:
                     trackNum = goToRandomAlbum()   # choose rand album
             else:
-                trackNum = ( (trackNum + 1) % len(VarsGlobal.tracks) )                    
+                trackNum = ( (trackNum + 1) % len(tracks) )                    
     debugMsg("NEXT New Track Num: " + str(trackNum))
     activeTrack = trackNum
     debugMsg("activeTrack: " + str(activeTrack))
@@ -337,7 +343,7 @@ def selectPrevTrack(trackNum):
             debugMsg("PREV New Track Num: " + str(trackNum))
             return trackNum
     # otherwise, if in doubt just go to the previous track on file    
-    maxTrack = len(VarsGlobal.tracks) - 1
+    maxTrack = len(tracks) - 1
     trackNum = ( trackNum -1 ) % maxTrack
     return trackNum
 
@@ -400,7 +406,7 @@ def getArtistNum(trackNum):
     return artistNum
 
 def displayTrackList(trackNum):
-    maxTrack = len(VarsGlobal.tracks) - 1
+    maxTrack = len(tracks) - 1
     trackNumDec1 = ( trackNum -1 ) % maxTrack
     trackNum = trackNum % maxTrack
     trackNumInc1 = ( trackNum + 1 ) % maxTrack
@@ -428,7 +434,7 @@ def displayArtistList(artistNumber):
 def browseMusic(trackNum, browseMode, deltaValue):
     global albumList, artistList, albumDictionary, artistDictionary
     if browseMode == "Track":
-        trackNum = ( trackNum + deltaValue ) % len(VarsGlobal.tracks)
+        trackNum = ( trackNum + deltaValue ) % len(tracks)
         displayTrackList(trackNum)
         return trackNum
     if browseMode == "Album":

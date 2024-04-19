@@ -260,15 +260,15 @@ if line != str(total_size):
 # load MP3 tracks
 
 if not os.path.exists(baseDir + "/tracks.txt") and stop == 0:
-    reload()
+    Track_No = FnsPy.reload(stop)
 else:
     with open(baseDir + "/tracks.txt", "r") as file:
         line = file.readline()
         while line:
-             tracks.append(line.strip())
+             VarsGlobal.tracks.append(line.strip())
              line = file.readline()
 
-FnsPy.outputToDisplay("Tracks: " + str(len(tracks)), "", "", "")
+FnsPy.outputToDisplay("Tracks: " + str(FnsPy.getNumTracks()), "", "", "")
 
 
 # check if USB mounted and find USB storage
@@ -301,12 +301,12 @@ if use_USB == 1:
         FnsPy.outputToDisplay("Checking for USB", "No USB Found !!", "", "")
         sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
         time.sleep(2)
-        if len(sd_tracks) != len(tracks):
+        if len(sd_tracks) != FnsPy.getNumTracks():
             reloading = 1
         FnsPy.outputToDisplay("Checking for USB", "", "", "")
 
 if reloading == 1 and stop == 0:
-    reload()
+    Track_No = FnsPy.reload(stop)
 
 
 
@@ -328,10 +328,10 @@ if MP3_Play == 1:
     radio = 0
     
 # try reloading tracks if one selected not found
-if len(tracks) > 0:
-    track = getTrack(Track_No)
+if FnsPy.getNumTracks() > 0:
+    track = FnsPy.getTrack(Track_No)
     if not os.path.exists (track) and usb_found > 0 and stop == 0:
-        reload()
+        Track_No = FnsPy.reload(stop)
 
 # populate albumDictionary, artistDictionary, albumList, artistList
 loadTrackDictionaries()
@@ -360,7 +360,7 @@ else:
     
 
 
-if len(tracks) > 0:
+if FnsPy.getNumTracks() > 0:
     ( artist, album, song ) = getArtistAlbumSongNames(Track_No)
 
 sleep_timer_start = time.monotonic()
@@ -426,7 +426,7 @@ while True:
                 pass
             
         # display Track
-        if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not (chooseModeActive or browseActive):
+        if (time.monotonic() - timer1 > 3 and Disp_on == 1 and FnsPy.getNumTracks() > 0) and not (chooseModeActive or browseActive):
             timer1 = time.monotonic()
             showTrackProgress(Track_No, "STOP", -1) 
 
@@ -970,19 +970,19 @@ while True:
                 time.sleep(1)
                 
         # try reloading tracks if none found
-        if len(tracks) == 0 and stop == 0:
-            reload()
+        if FnsPy.getNumTracks() == 0 and stop == 0:
+            Track_No = FnsPy.reload(stop)
             
         # try reloading tracks if one selected not found
-        if len(tracks) > 0:
-            track = getTrack(Track_No)
+        if FnsPy.getNumTracks() > 0:
+            track = FnsPy.getTrack(Track_No)
             if not os.path.exists (track) and stop == 0 :
-                reload()
+                Track_No = FnsPy.reload(stop)
 
 
             
         # play selected track
-        if MP3_Play == 1 and len(tracks) > 0:
+        if MP3_Play == 1 and FnsPy.getNumTracks() > 0:
             p = playMP3(Track_No)
             startPlayTimer = time.monotonic()
             Disp_on = 1
