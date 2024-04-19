@@ -18,6 +18,21 @@ SOFTWARE."""
 
 import VarsGlobal
 
+# setup oled
+# 128x32 display with hardware I2C:
+RST = None
+disp = Adafruit_SSD1306.SSD1306_128_32(rst=RST)
+disp.begin()
+disp.clear()
+disp.display()
+width  = disp.width
+height = disp.height
+image  = Image.new('1', (width, height))
+draw = ImageDraw.Draw(image)
+draw.rectangle((0,0,width,height), outline=0, fill=0)
+top = -2
+font = ImageFont.load_default()
+
 
 def getTrack(trackNum):
     titles[0],titles[1],titles[2],titles[3],titles[4],titles[5],titles[6] = VarsGlobal.tracks[trackNum].split("/")
@@ -27,13 +42,13 @@ def getTrack(trackNum):
 
 def outputToDisplay(dispLine1,dispLine2,dispLine3,dispLine4):
     # Display image.
-    VarsGlobal.draw.rectangle((0,0,VarsGlobal.width,VarsGlobal.height), outline=0, fill=0)
-    VarsGlobal.draw.text((0, VarsGlobal.top + 0), dispLine1,  font=VarsGlobal.font, fill=255)
-    VarsGlobal.draw.text((0, VarsGlobal.top + 8), dispLine2,  font=VarsGlobal.font, fill=255)
-    VarsGlobal.draw.text((0, VarsGlobal.top + 16),dispLine3,  font=VarsGlobal.font, fill=255)
-    VarsGlobal.draw.text((0, VarsGlobal.top + 24),dispLine4,  font=VarsGlobal.font, fill=255)
-    VarsGlobal.disp.image(VarsGlobal.image)
-    VarsGlobal.disp.display()
+    draw.rectangle((0,0,width,height), outline=0, fill=0)
+    draw.text((0, top + 0), dispLine1,  font=font, fill=255)
+    draw.text((0, top + 8), dispLine2,  font=font, fill=255)
+    draw.text((0, top + 16),dispLine3,  font=font, fill=255)
+    draw.text((0, top + 24),dispLine4,  font=font, fill=255)
+    disp.image(image)
+    disp.display()
 
 def outputToDisplayFlashing(dispLine1,dispLine2,dispLine3,dispLine4):
     numberFlashes = 5

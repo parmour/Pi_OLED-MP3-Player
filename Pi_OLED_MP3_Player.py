@@ -32,6 +32,8 @@ from mutagen.mp3 import MP3
 import alsaaudio
 from signal import signal, SIGTERM, SIGHUP, pause
 
+import FnsPy
+
 # To install SSD1306 driver...
 # git clone https://github.com/adafruit/Adafruit_Python_SSD1306.git
 # cd Adafruit_Python_SSD1306
@@ -163,20 +165,7 @@ trackHistory = []
 if Track_No < 0:
     Track_No = 0
 
-# setup oled
-# 128x32 display with hardware I2C:
-RST = None
-VarsGlobal.disp = Adafruit_SSD1306.SSD1306_128_32(rst=RST)
-VarsGlobal.disp.begin()
-VarsGlobal.disp.clear()
-VarsGlobal.disp.display()
-VarsGlobal.width  = disp.width
-VarsGlobal.height = disp.height
-VarsGlobal.image  = Image.new('1', (VarsGlobal.width, VarsGlobal.height))
-VarsGlobal.draw = ImageDraw.Draw(VarsGlobal.image)
-VarsGlobal.draw.rectangle((0,0,VarsGlobal.width,VarsGlobal.height), outline=0, fill=0)
-VarsGlobal.top = -2
-VarsGlobal.font = ImageFont.load_default()
+
 
 # read radio_stns.txt - format: Station Name,Station URL
 if os.path.exists (baseDir + "/radio_stns.txt"): 
@@ -230,7 +219,7 @@ favouritesIndex = 0
 
 
 
-outputToDisplay("MP3 Player: v" + version, "", "", "")
+FnsPy.outputToDisplay("MP3 Player: v" + version, "", "", "")
 time.sleep(2)
 stop = 0
 
@@ -279,19 +268,19 @@ else:
              tracks.append(line.strip())
              line = file.readline()
 
-outputToDisplay("Tracks: " + str(len(tracks)), "", "", "")
+FnsPy.outputToDisplay("Tracks: " + str(len(tracks)), "", "", "")
 
 
 # check if USB mounted and find USB storage
 if use_USB == 1:
     start = time.monotonic()
-    outputToDisplay("Checking for USB", "", "", "")
+    FnsPy.outputToDisplay("Checking for USB", "", "", "")
     while time.monotonic() - start < usb_timer:
         usb = glob.glob("/media/" +  h_user[0] + "/*")
         usb_found = len(usb)
-        outputToDisplay("Checking for USB", "Found: " + str(usb_found) + " USBs", str(int(usb_timer -(time.monotonic() - start))), "")
+        FnsPy.outputToDisplay("Checking for USB", "Found: " + str(usb_found) + " USBs", str(int(usb_timer -(time.monotonic() - start))), "")
         time.sleep(1)
-    outputToDisplay("Checking for USB", "", "", "")
+    FnsPy.outputToDisplay("Checking for USB", "", "", "")
     if usb_found > 0:
         # check if usb contents have changed, if so then reload tracks
         free = ["0","0","0","0"]
@@ -309,12 +298,12 @@ if use_USB == 1:
         with open(baseDir + "/freedisk.txt", "w") as f:
             for item in freedisk:
                 f.write("%s\n" % item)
-        outputToDisplay("Checking for USB", "No USB Found !!", "", "")
+        FnsPy.outputToDisplay("Checking for USB", "No USB Found !!", "", "")
         sd_tracks = glob.glob("/home/" + h_user[0] + "/Music/*/*/*.mp3")
         time.sleep(2)
         if len(sd_tracks) != len(tracks):
             reloading = 1
-        outputToDisplay("Checking for USB", "", "", "")
+        FnsPy.outputToDisplay("Checking for USB", "", "", "")
 
 if reloading == 1 and stop == 0:
     reload()
@@ -349,10 +338,10 @@ loadTrackDictionaries()
 
 # wait for internet connection
 if radio == 1:
-    outputToDisplay("Waiting for Radio...", "", "", "")
+    FnsPy.outputToDisplay("Waiting for Radio...", "", "", "")
     time.sleep(10)
     q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] ,shell=False)
-    outputToDisplay((Radio_Stns[radio_stn]), "", "", "")
+    FnsPy.outputToDisplay((Radio_Stns[radio_stn]), "", "", "")
     
 else:
     (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
@@ -452,12 +441,12 @@ while True:
                 t += " "
             clock = t + clock
             if secs != old_secs2 :
-                outputToDisplayRand(clock)
+                FnsPy.outputToDisplayRand(clock)
                 old_secs2 = secs
 
         # DISPLAY OFF timer
         if (time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1) and not (chooseModeActive or browseActive):
-            outputToDisplay("", "", "", "")
+            FnsPy.outputToDisplay("", "", "", "")
             Disp_on = 0
 
             
@@ -468,9 +457,9 @@ while True:
             t = 30
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed or buttonPLAY.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -479,11 +468,11 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
+                    FnsPy.outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    outputToDisplay("STOPPING........", "", "", "")
+                    FnsPy.outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(3)
-                outputToDisplay("", "", "", "")
+                FnsPy.outputToDisplay("", "", "", "")
                 sleep_timer = 0 
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
@@ -512,7 +501,7 @@ while True:
                     if player_mode == 3:
                         q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
                         time.sleep(0.05)
-                        outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                        FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
                         rs = Radio_Stns[radio_stn]
                         while buttonPLAY.is_pressed:
                             pass
@@ -534,7 +523,7 @@ while True:
                     debugMsg("buttonPLAY: released after HOLD")
                     if player_mode == 0 or player_mode == 1:    # start playing favourites
                         debugMsg("Choose first favourite album.")
-                        outputToDisplayFlashing("", "START ALBUM FAVS" , "", "")
+                        FnsPy.outputToDisplayFlashing("", "START ALBUM FAVS" , "", "")
                         Track_No = goToNextFavourite()   # play from start of next favourite
                         (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
                         stimer = getRemainingAlbumTime(Track_No) 
@@ -660,14 +649,14 @@ while True:
             ipAddr = get_ip()
             if ipAddr:
                 ipAddrLine = "IP: " + str(ipAddr)
-            outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", ipAddrLine)
+            FnsPy.outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", ipAddrLine)
             decisionMade = False
             loopsRemaining = 50
             while loopsRemaining and not decisionMade:
                 if buttonPLAY.is_pressed:
-                    outputToDisplayFlashing("SHUTTING DOWN...", "", "", "")
+                    FnsPy.outputToDisplayFlashing("SHUTTING DOWN...", "", "", "")
                     time.sleep(2)
-                    outputToDisplay("", "", "", "")
+                    FnsPy.outputToDisplay("", "", "", "")
                     MP3_Play = 0
                     radio = 0
                     time.sleep(1)
@@ -701,12 +690,12 @@ while True:
                 debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
                 if buttonFAVMODE_action == "PUSH":
                     # display current mode
-                    outputToDisplay("CURRENT MODE:", playerModeNames[player_mode] + "   " , "", "")
+                    FnsPy.outputToDisplay("CURRENT MODE:", playerModeNames[player_mode] + "   " , "", "")
                     time.sleep(1)
                 elif buttonFAVMODE_action == "HOLD":
                     if player_mode != new_player_mode:
                         player_mode = new_player_mode
-                        outputToDisplayFlashing("", playerModeNames[player_mode] + "   " , "", "")
+                        FnsPy.outputToDisplayFlashing("", playerModeNames[player_mode] + "   " , "", "")
                         time.sleep(1)
                         if player_mode == 0:   # Album
                             radio = 0
@@ -727,14 +716,14 @@ while True:
                             radio = 1
                             MP3_play = 0
                             q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
-                            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                            FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
                             rs = Radio_Stns[radio_stn] + "               "[0:19]
                             FnsPlayer.writeDefaults([radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time])
                 buttonFAVMODE_action = ""
                 chooseModeActive = False
             else:   # actions when button held               
                 new_player_mode = (int(time.monotonic() - buttonFAVMODE_timer - buttonHold) % numModes ) # this will change each second as button held
-                outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   " , "", "")
+                FnsPy.outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   " , "", "")
                 buttonFAVMODE_action = "HOLD"
                 chooseModeActive = True
         else:                
@@ -781,7 +770,7 @@ while True:
                 pass
         # DISPLAY OFF timer
         if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
-            outputToDisplay("", "", "", "")
+            FnsPy.outputToDisplay("", "", "", "")
             Disp_on = 0
 
             
@@ -793,9 +782,9 @@ while True:
             Disp_on = 1
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -804,11 +793,11 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
+                    FnsPy.outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    outputToDisplay("STOPPING........", "", "", "")
+                    FnsPy.outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(1)
-                outputToDisplay("", "", "", "")
+                FnsPy.outputToDisplay("", "", "", "")
                 q.kill()
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
@@ -829,9 +818,9 @@ while True:
             shutdownMsg = ""
         if Disp_on == 1:
             if show_clock == 1 and synced == 1:
-                outputToDisplay("", "      " + clock, shutdownMsg, "")
+                FnsPy.outputToDisplay("", "      " + clock, shutdownMsg, "")
             else:
-                outputToDisplay("", "", shutdownMsg, "")
+                FnsPy.outputToDisplay("", "", shutdownMsg, "")
         t = ""
         for r in range (0,random.randint(0,10)):
             t += " "
@@ -840,7 +829,7 @@ while True:
             if secs != old_secs:
                 if sleep_timer > 0:
                     clock = clock + " " + str(time_left)
-                outputToDisplayRand(clock)
+                FnsPy.outputToDisplayRand(clock)
                 old_secs = secs
             
          # check for VOLDN  key
@@ -848,7 +837,7 @@ while True:
             debugMsg("buttonVOLDN PUSH")
             Disp_on = 1
             Disp_start = time.monotonic()
-            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+            FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             Set_Volume()
             time.sleep(0.5)
 
@@ -858,7 +847,7 @@ while True:
             debugMsg("buttonVOLUP PUSH")
             Disp_on = 1
             Disp_start = time.monotonic()
-            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+            FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             Set_Volume()
             time.sleep(0.5)
 
@@ -873,7 +862,7 @@ while True:
                radio_stn = len(Radio_Stns) - 2
             q.kill()
             q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+            FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             rs = Radio_Stns[radio_stn] + "               "[0:19]
             FnsPlayer.writeDefaults([radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time])
 
@@ -888,7 +877,7 @@ while True:
                radio_stn = 0
             q.kill()
             q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+            FnsPy.outputToDisplay(Radio_Stns[radio_stn], "", "", "")
             rs = Radio_Stns[radio_stn] + "               "[0:19]
             FnsPlayer.writeDefaults([radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time])
             time.sleep(0.5)
@@ -900,7 +889,7 @@ while True:
             Disp_start = time.monotonic()
             q.kill()
             radio = 0
-            outputToDisplay("Radio Stopped      ", "", "", "")
+            FnsPy.outputToDisplay("Radio Stopped      ", "", "", "")
             FnsPlayer.writeDefaults([radio_stn, gapless, volume, Track_No, player_mode, auto_start, start_time])
             time.sleep(2)
             
@@ -945,9 +934,9 @@ while True:
             t = 30
             while t > 0 and abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
                 else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
+                    FnsPy.outputToDisplay("", "STOPPING in " + str(t), "", "")
                 if buttonFAVMODE.is_pressed:
                     sleep_timer_start = time.monotonic()
                     sleep_timer = 900
@@ -956,13 +945,13 @@ while True:
                 time.sleep(1)
             if abort_sd == 0:
                 if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
+                    FnsPy.outputToDisplay("SHUTTING DOWN...", "", "", "")
                 else:
-                    outputToDisplay("STOPPING........", "", "", "")
+                    FnsPy.outputToDisplay("STOPPING........", "", "", "")
                 time.sleep(0.05)
                 time.sleep(3)
                 Disp_on = 0
-                outputToDisplay("", "", "", "")
+                FnsPy.outputToDisplay("", "", "", "")
                 poll = p.poll()
                 if poll == None:
                     os.killpg(p.pid, SIGTERM)
@@ -972,7 +961,7 @@ while True:
                 stopped = 1
                 MP3_Play = 0
             else:
-                outputToDisplay("Play.." + str(track_n)[0:5] + playerStatus(player_mode), "", "", "")
+                FnsPy.outputToDisplay("Play.." + str(track_n)[0:5] + playerStatus(player_mode), "", "", "")
                 time.sleep(0.05)
                 Disp_start = time.monotonic()
             poll = p.poll()
@@ -1021,7 +1010,7 @@ while True:
                     if sleep_timer > 0:
                         clock += " " + str(time_left)
                     if secs != old_secs2 :
-                        outputToDisplayRand(clock)
+                        FnsPy.outputToDisplayRand(clock)
                         old_secs2 = secs
                   
                 time.sleep(0.2)
@@ -1029,7 +1018,7 @@ while True:
   
                 # DISPLAY OFF timer
                 if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
-                    outputToDisplay("", "", "", "")
+                    FnsPy.outputToDisplay("", "", "", "")
                     Disp_on = 0
                 
 
@@ -1060,7 +1049,7 @@ while True:
                     if start_time > 5:
                         start_time -= 5
                     os.killpg(p.pid, SIGTERM)
-                    outputToDisplay("Track Stopped", "", "", "")
+                    FnsPy.outputToDisplay("Track Stopped", "", "", "")
                     time.sleep(2)
                     showTrackProgress(Track_No, "STOP", -1)
                     goToNextTrack = 0
@@ -1087,26 +1076,26 @@ while True:
                         os.killpg(p.pid, SIGTERM)                        
                         if buttonNEXT_action == "PUSH":
                             # push action
-                            outputToDisplayFlashing("", "> NEXT TRACK", "", "")
+                            FnsPy.outputToDisplayFlashing("", "> NEXT TRACK", "", "")
                             Track_No = selectNextTrack(Track_No)
                         elif buttonNEXT_action == "HOLD":
                             # hold action
                             if player_mode == 0:   # Album
                                 if playFavourites:
-                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
                                     Track_No = goToNextFavourite()
                                 else:
-                                    outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
                                     Track_No = goToNextAlbum(Track_No)
                             elif player_mode == 1:   # Album Rand
                                 if playFavourites:
-                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
                                     Track_No = goToNextFavourite()
                                 else:
-                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> RAND ALBUM", "", "")
                                     Track_No = goToRandomAlbum()
                             else:
-                                outputToDisplayFlashing("", "> NEXT TRACK", "", "")
+                                FnsPy.outputToDisplayFlashing("", "> NEXT TRACK", "", "")
                                 Track_No = selectNextTrack(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
@@ -1140,25 +1129,25 @@ while True:
                         os.killpg(p.pid, SIGTERM)                        
                         if buttonPREV_action == "PUSH":
                             # push action
-                            outputToDisplayFlashing("", "> PREV TRACK", "", "")
+                            FnsPy.outputToDisplayFlashing("", "> PREV TRACK", "", "")
                             Track_No = selectPrevTrack(Track_No)
                         elif buttonPREV_action == "HOLD":  # hold action
                             if player_mode == 0:   # Album
                                 if playFavourites:
-                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
                                     Track_No = goToPrevFavourite()
                                 else:
-                                    outputToDisplayFlashing("", "> PREV ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> PREV ALBUM", "", "")
                                     Track_No = goToPrevAlbum(Track_No)                                    
                             elif player_mode == 1:   # Album Rand
                                 if playFavourites:
-                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
                                     Track_No = goToPrevFavourite()
                                 else:
-                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                    FnsPy.outputToDisplayFlashing("", "> RAND ALBUM", "", "")
                                     Track_No = goToRandomAlbum()
                             else:                            
-                                outputToDisplayFlashing("", "> PREV TRACK", "", "")
+                                FnsPy.outputToDisplayFlashing("", "> PREV TRACK", "", "")
                                 Track_No = selectPrevTrack(Track_No)
                         showTrackProgress(Track_No, "PLAY", -1)
                         goToNextTrack = 0
