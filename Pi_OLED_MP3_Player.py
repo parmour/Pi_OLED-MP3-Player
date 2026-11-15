@@ -32,6 +32,62 @@ from mutagen.mp3 import MP3
 import alsaaudio
 from signal import signal, SIGTERM, SIGHUP, pause
 
+class TrackedButton:
+    """Tracks press, hold, and release for a GPIO button.
+    poll() returns 'PUSH', 'HOLD', or '' — non-blocking.
+    wait_for_release_next() detects press+hold, result returned by next poll().
+    """
+    def __init__(self, gpio_button, hold_time=0.7):
+        self.button = gpio_button
+        self.hold_time = hold_time
+        self._action = ""
+        self._press_time = 0
+
+    def poll(self):
+        """Non-blocking. Returns 'PUSH', 'HOLD', or '' when action fires on release."""
+        if self._action:
+            if not self.button.is_pressed:
+                result = self._action
+                self._action = ""
+                return result
+            elif (time.monotonic() - self._press_time) > self.hold_time:
+                self._action = "HOLD"
+        else:
+            if self.button.is_pressed:
+                self._action = "PUSH"
+                self._press_time = time.monotonic()
+        return ""
+
+    def wait_press_release(self):
+        """Blocking: busy-waits press, sets 'PUSH' or 'HOLD', returns on release."""
+        if not self._action and self.button.is_pressed:
+            self._action = "PUSH"
+            self._press_time = time.monotonic()
+            while self.button.is_pressed and (time.monotonic() - self._press_time) < self.hold_time:
+                pass
+            if (time.monotonic() - self._press_time) > self.hold_time:
+                self._action = "HOLD"
+            # busy-wait until release so next poll() returns immediately
+            while self.button.is_pressed:
+                pass
+            result = self._action
+            self._action = ""
+            return result
+        return ""
+
+    @property
+    def is_pressed(self):
+        return self.button.is_pressed
+
+    def is_held(self):
+        return self._action == "HOLD"
+
+    @property
+    def hold_duration(self):
+        """Seconds the button has been pressed (0 if not currently pressed)."""
+        if self._press_time > 0 and self.button.is_pressed:
+            return time.monotonic() - self._press_time
+        return 0
 # To install SSD1306 driver...
 # git clone https://github.com/adafruit/Adafruit_Python_SSD1306.git
 # cd Adafruit_Python_SSD1306
@@ -117,9 +173,54 @@ def get_ip():
         s.close()
     return IP
     
-def debugMsg( msgString ):
+def get_wifi_status():
+    """Returns 'ON' or 'OFF' based on wlan0 link state."""
+    try:
+        result = subprocess.run(["ip", "link", "show", "wlan0"], capture_output=True, text=True)
+        if "state UP" in result.stdout:
+            return "ON"
+        return "OFF"
+    except Exception:
+        return "?"
+
+def toggle_wifi():
+    """Toggle WiFi on/off using ip link.
+    When turning ON, also triggers DHCP via dhcpcd
+    (since dhcpcd ignores wlan0 at boot via denyinterfaces)."""
+    if get_wifi_status() == "ON":
+        subprocess.run(["sudo", "dhcpcd", "-k", "wlan0"])    # stop dhcpcd for wlan0
+        subprocess.run(["sudo", "ip", "link", "set", "wlan0", "down"])
+    else:
+        subprocess.run(["sudo", "ip", "link", "set", "wlan0", "up"])
+        time.sleep(3)  # wait for interface to come up
+        subprocess.run(["sudo", "dhcpcd", "-b", "wlan0"])   # start dhcpcd for wlan0
+
+def get_bluetooth_status():
+    """Returns 'ON' or 'OFF' based on bluetooth service state."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", "bluetooth.service"],
+            capture_output=True, text=True
+        )
+        return "ON" if result.stdout.strip() == "active" else "OFF"
+    except Exception:
+        return "?"
+
+def toggle_bluetooth():
+    """Toggle Bluetooth on/off by starting/stopping services."""
+    if get_bluetooth_status() == "ON":
+        subprocess.run(["sudo", "systemctl", "stop", "bluetooth.service"])
+        subprocess.run(["sudo", "systemctl", "stop", "hciuart.service"])
+    else:
+        subprocess.run(["sudo", "systemctl", "start", "hciuart.service"])
+        time.sleep(1)
+        subprocess.run(["sudo", "systemctl", "start", "bluetooth.service"])
+
+def debugMsg(msgString):
     if debugOut:
         print(msgString)
+        with open(baseDir + "/mp3_player.log", "a") as log:
+            log.write(datetime.datetime.now().strftime("%H:%M:%S") + " " + str(msgString) + "\n")
 
 def writeFavourites():
     global favourites_file, albumFavourites
@@ -216,19 +317,26 @@ if os.path.exists (baseDir + "/radio_stns.txt"):
                Radio_Stns.append(b.strip())
            line = textobj.readline()
 
-# setup GPIO
-buttonPREV  = Button(PREV)
-buttonPLAY  = Button(PLAY)
-buttonNEXT  = Button(NEXT)
+# setup GPIO (raw buttons)
 buttonVOLDN = Button(VOLDN)
 buttonVOLUP = Button(VOLUP)
-buttonFAVMODE = Button(FAVMODE)
+
+# tracked buttons with press/hold/release detection
+trkPLAY  = TrackedButton(Button(PLAY))
+trkNEXT  = TrackedButton(Button(NEXT))
+trkPREV  = TrackedButton(Button(PREV))
+trkFAVMODE = TrackedButton(Button(FAVMODE))
+
+# Convenience aliases for simple is_pressed checks
+buttonPLAY  = trkPLAY.button
+buttonNEXT  = trkNEXT.button
+buttonPREV  = trkPREV.button
+buttonFAVMODE = trkFAVMODE.button
 
 # initialise parameters
 old_album   = 0
 old_artist  = 0
 titles      = [0,0,0,0,0,0,0]
-itles       = [0,0,0,0,0,0,0]
 sleep_timer = sleep_timer * 60
 freedisk    = ["0","0","0","0"]
 old_secs    = "00"
@@ -456,7 +564,7 @@ def getSongDetails(trackNum):
     try:
         if int(song[0:2]) > 0:
             out3 = song[3:22]
-    except:
+    except Exception:
         pass
     return ( out1, out2, out3)
 
@@ -700,6 +808,45 @@ def getTrackLen(TrackNum):
     track_len = audio.info.length
     return track_len
 
+def check_clock_sync():
+    global synced
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show"],
+            capture_output=True, text=True, timeout=5
+        )
+        synced = 1 if "NTPSynchronized=yes" in result.stdout else 0
+    except Exception:
+        synced = 0
+
+def run_sleep_timer_countdown(abort_buttons=None):
+    """Display 30-second countdown, return True if aborted, False if timed out."""
+    global sleep_timer_start, sleep_timer, abort_sd
+    if abort_buttons is None:
+        abort_buttons = [buttonFAVMODE]
+    abort_sd = 0
+    t = 30
+    while t > 0 and abort_sd == 0:
+        if sleep_shutdn == 1:
+            outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
+        else:
+            outputToDisplay("", "STOPPING in " + str(t), "", "")
+        for btn in abort_buttons:
+            if btn.is_pressed:
+                sleep_timer_start = time.monotonic()
+                sleep_timer = 900
+                abort_sd = 1
+                break
+        t -= 1
+        time.sleep(1)
+    if abort_sd == 0:
+        if sleep_shutdn == 1:
+            outputToDisplay("SHUTTING DOWN...", "", "", "")
+        else:
+            outputToDisplay("STOPPING........", "", "", "")
+        return False
+    return True
+
 
 
 def playMP3(TrackNum):
@@ -716,9 +863,9 @@ def playMP3(TrackNum):
     debugMsg("playMP3: track: " + str(track))
     debugMsg("playMP3: start_time: " + str(start_time))
     debugMsg("playMP3: new activeTrack: " + str(activeTrack))
-    rpistr = "mplayer -ss " + str(start_time) + " -quiet " +  '"' + track + '"'
+    cmd = ["mplayer", "-ss", str(start_time), "-quiet", track]
     addToTrackHistory(TrackNum)
-    p = subprocess.Popen(rpistr, shell=True, preexec_fn=os.setsid)
+    p = subprocess.Popen(cmd, shell=False, preexec_fn=os.setsid)
     return p
 
 
@@ -913,30 +1060,11 @@ sync_timer        = time.monotonic()
 xt                = 0
 
 # check if clock synchronised
-if os.path.exists ("/run/shm/sync.txt"):
-    os.remove("/run/shm/sync.txt")
-os.system("timedatectl >> /run/shm/sync.txt")
-# read sync.txt file
-try:
-    sync = []
-    with open("/run/shm/sync.txt", "r") as file:
-        line = file.readline()
-        while line:
-            sync.append(line.strip())
-            line = file.readline()
-    if sync[4] == "System clock synchronized: yes":
-        synced = 1
-    else:
-        synced = 0
-except:
-    pass
+check_clock_sync()
 
 #Track_No = selectNextTrack(Track_No)
 
-buttonFAVMODE_action = ""
-buttonPREV_action = ""
-buttonNEXT_action = ""
-buttonPLAY_action = ""
+# button state tracked by TrackedButton instances (trkPLAY, trkNEXT, trkPREV, trkFAVMODE)
 
 chooseModeActive = False
 browseActive = False
@@ -951,22 +1079,7 @@ while True:
         # check if clock synchronised
         if time.monotonic() - sync_timer > 30:
             sync_timer = time.monotonic()
-            if os.path.exists ("/run/shm/sync.txt"):
-                os.remove("/run/shm/sync.txt")
-            os.system("timedatectl >> /run/shm/sync.txt")
-            try:
-                sync = []
-                with open("/run/shm/sync.txt", "r") as file:
-                    line = file.readline()
-                    while line:
-                        sync.append(line.strip())
-                        line = file.readline()
-                if sync[4] == "System clock synchronized: yes":
-                    synced = 1
-                else:
-                    synced = 0
-            except:
-                pass
+            check_clock_sync()
             
         # display Track
         if (time.monotonic() - timer1 > 3 and Disp_on == 1 and len(tracks) > 0) and not (chooseModeActive or browseActive):
@@ -996,27 +1109,11 @@ while True:
         # sleep_timer timer
         if (time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0) and not (chooseModeActive or browseActive):
             Disp_start = time.monotonic()
-            abort_sd = 0
-            t = 30
-            while t > 0 and abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
-                else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
-                if buttonFAVMODE.is_pressed or buttonPLAY.is_pressed:
-                    sleep_timer_start = time.monotonic()
-                    sleep_timer = 900
-                    abort_sd = 1
-                t -=1
-                time.sleep(1)
-            if abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
-                else:
-                    outputToDisplay("STOPPING........", "", "", "")
+            aborted = run_sleep_timer_countdown([buttonFAVMODE, buttonPLAY])
+            if not aborted:
                 time.sleep(3)
                 outputToDisplay("", "", "", "")
-                sleep_timer = 0 
+                sleep_timer = 0
                 if sleep_shutdn == 1:
                     os.system("sudo shutdown -h now")
             else:
@@ -1036,54 +1133,38 @@ while True:
 
 
         # check for PLAY key when stopped
-        if buttonPLAY_action:
-            if not buttonPLAY.is_pressed:   # actions when button released
-                debugMsg("buttonPLAY: " + buttonPLAY_action)
-                if buttonPLAY_action == "PUSH":   # released after push
-                    # player mode is radio
-                    if player_mode == 3:
-                        q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]] , shell=False)
-                        time.sleep(0.05)
-                        outputToDisplay(Radio_Stns[radio_stn], "", "", "")
-                        rs = Radio_Stns[radio_stn]
-                        while buttonPLAY.is_pressed:
-                            pass
-                        time.sleep(1)
-                        radio    = 1
-                        MP3_Play = 0
-                        writeDefaults()                
-                    # player mode is not radio
-                    else:
-                        if player_mode == 0 or player_mode == 1:
-                            (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                            stimer = getRemainingAlbumTime(Track_No) 
-                        MP3_Play = 1
-                        radio    = 0
-                        writeDefaults()
-                elif buttonPLAY_action == "HOLD":   # released after hold
-                    # player mode is not radio and rand tracks
-                    # 0 = Album, 1 = Album Rand, 2 = Rand Tracks, 3 = Radio
-                    debugMsg("buttonPLAY: released after HOLD")
-                    if player_mode == 0 or player_mode == 1:    # start playing favourites
-                        debugMsg("Choose first favourite album.")
-                        outputToDisplayFlashing("", "START ALBUM FAVS" , "", "")
-                        Track_No = goToNextFavourite()   # play from start of next favourite
-                        (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
-                        stimer = getRemainingAlbumTime(Track_No) 
-                        MP3_Play = 1
-                        radio    = 0
-                        playFavourites = True
-                        writeDefaults()                      
-                buttonPLAY_action = ""
-            else:   # actions when button held               
-                if (time.monotonic() - buttonPLAY_timer) > buttonHold:
-                    buttonPLAY_action = "HOLD"
-        else:                
-            if buttonPLAY.is_pressed:   # actions when button held
-                buttonPLAY_action = "PUSH"
-                buttonPLAY_timer = time.monotonic()
-                if (time.monotonic() - buttonPLAY_timer) > buttonHold:
-                    buttonPLAY_action = "HOLD"
+        action = trkPLAY.poll()
+        if action == "PUSH":
+            debugMsg("buttonPLAY: PUSH")
+            if player_mode == 3:
+                q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn+1]], shell=False)
+                time.sleep(0.05)
+                outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                while buttonPLAY.is_pressed:
+                    pass
+                time.sleep(1)
+                radio = 1
+                MP3_Play = 0
+                writeDefaults()
+            else:
+                if player_mode == 0 or player_mode == 1:
+                    (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                    stimer = getRemainingAlbumTime(Track_No)
+                MP3_Play = 1
+                radio = 0
+                writeDefaults()
+        elif action == "HOLD":
+            debugMsg("buttonPLAY: HOLD")
+            if player_mode == 0 or player_mode == 1:
+                debugMsg("Choose first favourite album.")
+                outputToDisplayFlashing("", "START ALBUM FAVS", "", "")
+                Track_No = goToNextFavourite()
+                (remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
+                stimer = getRemainingAlbumTime(Track_No)
+                MP3_Play = 1
+                radio = 0
+                playFavourites = True
+                writeDefaults() 
 
 
 
@@ -1096,35 +1177,28 @@ while True:
 
 
         # check NEXT key when stopped
-        if buttonNEXT_action:
-            if not buttonNEXT.is_pressed:   # actions when button released
-                debugMsg("buttonNEXT: " + buttonNEXT_action)
-                # button released after push - action new selection - show track list
+        action = trkNEXT.poll()
+        if action:
+            debugMsg("buttonNEXT: " + action)
+            Track_No = browseMusic(Track_No, browseMode, 1)
+            browseActive = True
+            Disp_timer = 35
+            playFavourites = False
+            browseTimer = time.monotonic()
+
+        # while-held behavior (browse mode escalation, periodic scrolling)
+        held = trkNEXT.hold_duration
+        if held > 0:
+            if held > (buttonHold + 2) and browseMode == "Track":
+                browseMode = "Album"
+            if held > (buttonHold + 4) and browseMode == "Album":
+                browseMode = "Artist"
+            if int((held / 0.3)) % 2:
                 Track_No = browseMusic(Track_No, browseMode, 1)
-                buttonNEXT_action = ""
                 browseActive = True
-                Disp_timer = 35     # keep display on longer while browsing
+                Disp_timer = 35
                 playFavourites = False
                 browseTimer = time.monotonic()
-            else:   # actions when button held
-                buttonNEXT_action = "HOLD"
-                buttonNEXT_holdtime = time.monotonic() - buttonNEXT_timer 
-                if buttonNEXT_holdtime > (buttonHold + 2) and browseMode == "Track":  # after holding 2 seconds start browsing albums
-                    browseMode = "Album"
-                if buttonNEXT_holdtime > (buttonHold + 4) and browseMode == "Album":  # after holding 4 seconds start browsing artists
-                    browseMode = "Artist"
-                if int((buttonNEXT_holdtime / 0.3)) % 2:
-                    Track_No = browseMusic(Track_No, browseMode, 1)
-                    browseActive = True
-                    Disp_timer = 35     # keep display on longer while browsing
-                    playFavourites = False
-                    browseTimer = time.monotonic()
-        else:                
-            if buttonNEXT.is_pressed:   # actions when button held
-                buttonNEXT_action = "PUSH"
-                buttonNEXT_timer = time.monotonic()
-                if (time.monotonic() - buttonNEXT_timer) > buttonHold:
-                    buttonNEXT_action = "HOLD"
 
         if browseActive and (time.monotonic() - browseTimer) > 3:
             if browseMode == "Artist":
@@ -1137,43 +1211,36 @@ while True:
                 browseActive = False
 
         if Disp_timer != 15 and not browseActive:
-            Disp_timer = 15     # revert display timout length
+            Disp_timer = 15     # revert display timeout length
 
 
         ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
         # PREV              PREV TRACK/RADIO - PREV ALB | BROWSE PREV ALB - BROWSE PREV ARTIST 
         ######################################################################################
 
-        # check NEXT key when stopped
-        if buttonPREV_action:
-            if not buttonPREV.is_pressed:   # actions when button released
-                debugMsg("buttonPREV: " + buttonPREV_action)
-                # button released after push - action new selection - show track list
+        # check PREV key when stopped
+        action = trkPREV.poll()
+        if action:
+            debugMsg("buttonPREV: " + action)
+            Track_No = browseMusic(Track_No, browseMode, -1)
+            browseActive = True
+            Disp_timer = 35
+            playFavourites = False
+            browseTimer = time.monotonic()
+
+        # while-held behavior (browse mode escalation, periodic scrolling)
+        held = trkPREV.hold_duration
+        if held > 0:
+            if held > (buttonHold + 3) and browseMode == "Track":
+                browseMode = "Album"
+            if held > (buttonHold + 8) and browseMode == "Album":
+                browseMode = "Artist"
+            if int((held / 0.3)) % 2:
                 Track_No = browseMusic(Track_No, browseMode, -1)
-                buttonPREV_action = ""
                 browseActive = True
-                Disp_timer = 35     # keep display on longer while browsing
+                Disp_timer = 35
                 playFavourites = False
                 browseTimer = time.monotonic()
-            else:   # actions when button held
-                buttonPREV_action = "HOLD"
-                buttonPREV_holdtime = time.monotonic() - buttonPREV_timer 
-                if buttonPREV_holdtime > (buttonHold + 3) and browseMode == "Track":  # after holding 3 seconds start browsing albums
-                    browseMode = "Album"
-                if buttonPREV_holdtime > (buttonHold + 8) and browseMode == "Album":  # after holding 8 seconds start browsing artists
-                    browseMode = "Artist"
-                if int((buttonPREV_holdtime / 0.3)) % 2:
-                    Track_No = browseMusic(Track_No, browseMode, -1)
-                    browseActive = True
-                    Disp_timer = 35     # keep display on longer while browsing
-                    playFavourites = False
-                    browseTimer = time.monotonic()
-        else:                
-            if buttonPREV.is_pressed:   # actions when button held
-                buttonPREV_action = "PUSH"
-                buttonPREV_timer = time.monotonic()
-                if (time.monotonic() - buttonPREV_timer) > buttonHold:
-                    buttonPREV_action = "HOLD"
 
 
 
@@ -1185,14 +1252,19 @@ while True:
         ######################################################################################
 
 
-        # check for VOLUP or VOLDN key when stopped
+        # check for VOLUP or VOLDN key when stopped — system menu
         if buttonVOLUP.is_pressed and buttonVOLDN.is_pressed:
             debugMsg("button VOLUP and VOLDN PUSHED at same time")
-            ipAddrLine = "" 
+            wifi_status = get_wifi_status()
+            bt_status = get_bluetooth_status()
             ipAddr = get_ip()
-            if ipAddr:
-                ipAddrLine = "IP: " + str(ipAddr)
-            outputToDisplay("", "PLAY = SHUTDOWN" , "PREV = BACK", ipAddrLine)
+            ip_line = "IP: " + ipAddr if ipAddr else ""
+            outputToDisplay(
+                "WiFi: " + wifi_status + "  BT: " + bt_status,
+                "PLAY = SHUTDOWN",
+                "NEXT = TOGGLE WiFi",
+                "FAV = TOGGLE BT"
+            )
             decisionMade = False
             loopsRemaining = 50
             while loopsRemaining and not decisionMade:
@@ -1206,6 +1278,28 @@ while True:
                     os.system("sudo shutdown -h now")
                 if buttonPREV.is_pressed:
                     decisionMade = True
+                if buttonNEXT.is_pressed:
+                    toggle_wifi()
+                    wifi_status = get_wifi_status()
+                    ipAddr = get_ip()
+                    ip_line = "IP: " + ipAddr if ipAddr else ""
+                    outputToDisplay(
+                        "WiFi: " + wifi_status + "  BT: " + bt_status,
+                        "PLAY = SHUTDOWN",
+                        "NEXT = TOGGLE WiFi",
+                        "FAV = TOGGLE BT"
+                    )
+                    time.sleep(0.3)
+                if buttonFAVMODE.is_pressed:
+                    toggle_bluetooth()
+                    bt_status = get_bluetooth_status()
+                    outputToDisplay(
+                        "WiFi: " + wifi_status + "  BT: " + bt_status,
+                        "PLAY = SHUTDOWN",
+                        "NEXT = TOGGLE WiFi",
+                        "FAV = TOGGLE BT"
+                    )
+                    time.sleep(0.3)
                 loopsRemaining -= 1
                 time.sleep(0.1)
         elif buttonVOLUP.is_pressed or buttonVOLDN.is_pressed:
@@ -1228,55 +1322,46 @@ while True:
         ######################################################################################
 
         # check for FAVMODE key when stopped
-        if buttonFAVMODE_action:
-            if not buttonFAVMODE.is_pressed:   # actions when button released
-                debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
-                if buttonFAVMODE_action == "PUSH":
-                    # display current mode
-                    outputToDisplay("CURRENT MODE:", playerModeNames[player_mode] + "   " , "", "")
-                    time.sleep(1)
-                elif buttonFAVMODE_action == "HOLD":
-                    if player_mode != new_player_mode:
-                        player_mode = new_player_mode
-                        outputToDisplayFlashing("", playerModeNames[player_mode] + "   " , "", "")
-                        time.sleep(1)
-                        if player_mode == 0:   # Album
-                            radio = 0
-                            MP3_play = 1
-                            Track_No = selectNextTrack(Track_No)
-                            writeDefaults()
-                        elif player_mode == 1:   # Album Rand
-                            radio = 0
-                            MP3_play = 1                   
-                            Track_No = selectNextTrack(Track_No)
-                            writeDefaults()
-                        elif player_mode == 2:   # Rand Tracks
-                            radio = 0
-                            MP3_play = 1                  
-                            Track_No = selectNextTrack(Track_No)
-                            writeDefaults()
-                        else:     # Radio
-                            radio = 1
-                            MP3_play = 0
-                            q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]] , shell=False)
-                            outputToDisplay(Radio_Stns[radio_stn], "", "", "")
-                            rs = Radio_Stns[radio_stn] + "               "[0:19]
-                            writeDefaults()
-                buttonFAVMODE_action = ""
-                chooseModeActive = False
-            else:   # actions when button held               
-                new_player_mode = (int(time.monotonic() - buttonFAVMODE_timer - buttonHold) % numModes ) # this will change each second as button held
-                outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   " , "", "")
-                buttonFAVMODE_action = "HOLD"
-                chooseModeActive = True
-        else:                
-            if buttonFAVMODE.is_pressed:   # actions when button held
-                buttonFAVMODE_action = "PUSH"
-                buttonFAVMODE_timer = time.monotonic()
-                #while buttonFAVMODE.is_pressed and (time.monotonic() - buttonFAVMODE_timer) < buttonHold:
-                #    pass
-                if (time.monotonic() - buttonFAVMODE_timer) > buttonHold:
-                    buttonFAVMODE_action = "HOLD"
+        action = trkFAVMODE.poll()
+        if action == "PUSH":
+            debugMsg("buttonFAVMODE: PUSH")
+            outputToDisplay("CURRENT MODE:", playerModeNames[player_mode] + "   ", "", "")
+            time.sleep(1)
+        elif action == "HOLD":
+            debugMsg("buttonFAVMODE: HOLD")
+            if player_mode != new_player_mode:
+                player_mode = new_player_mode
+                outputToDisplayFlashing("", playerModeNames[player_mode] + "   ", "", "")
+                time.sleep(1)
+                if player_mode == 0:   # Album
+                    radio = 0
+                    MP3_play = 1
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                elif player_mode == 1:   # Album Rand
+                    radio = 0
+                    MP3_play = 1
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                elif player_mode == 2:   # Rand Tracks
+                    radio = 0
+                    MP3_play = 1
+                    Track_No = selectNextTrack(Track_No)
+                    writeDefaults()
+                else:     # Radio
+                    radio = 1
+                    MP3_play = 0
+                    q = subprocess.Popen(["mplayer", "-nocache", Radio_Stns[radio_stn]], shell=False)
+                    outputToDisplay(Radio_Stns[radio_stn], "", "", "")
+                    rs = Radio_Stns[radio_stn] + "               "[0:19]
+                    writeDefaults()
+            chooseModeActive = False
+
+        # while-held behavior (mode cycling)
+        if trkFAVMODE.hold_duration > buttonHold:
+            new_player_mode = int((trkFAVMODE.hold_duration - buttonHold) % numModes)
+            outputToDisplay("CURRENT MODE:", playerModeNames[new_player_mode] + "   ", "", "")
+            chooseModeActive = True
                     #orig_player_mode = player_mode
 
                 
@@ -1295,22 +1380,7 @@ while True:
         # check if clock synchronised
         if time.monotonic() - sync_timer > 60:
             sync_timer = time.monotonic()
-            if os.path.exists ("/run/shm/sync.txt"):
-                os.remove("/run/shm/sync.txt")
-            os.system("timedatectl >> /run/shm/sync.txt")
-            try:
-                sync = []
-                with open("/run/shm/sync.txt", "r") as file:
-                    line = file.readline()
-                    while line:
-                        sync.append(line.strip())
-                        line = file.readline()
-                if sync[4] == "System clock synchronized: yes":
-                    synced = 1
-                else:
-                    synced = 0
-            except:
-                pass
+            check_clock_sync()
         # DISPLAY OFF timer
         if time.monotonic() - Disp_start > Disp_timer and Disp_timer > 0 and Disp_on == 1:
             outputToDisplay("", "", "", "")
@@ -1320,25 +1390,9 @@ while True:
         # sleep_timer timer
         if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
             Disp_start = time.monotonic()
-            abort_sd = 0
-            t = 30
             Disp_on = 1
-            while t > 0 and abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
-                else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
-                if buttonFAVMODE.is_pressed:
-                    sleep_timer_start = time.monotonic()
-                    sleep_timer = 900
-                    abort_sd = 1
-                t -=1
-                time.sleep(1)
-            if abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
-                else:
-                    outputToDisplay("STOPPING........", "", "", "")
+            aborted = run_sleep_timer_countdown()
+            if not aborted:
                 time.sleep(1)
                 outputToDisplay("", "", "", "")
                 q.kill()
@@ -1447,22 +1501,7 @@ while True:
         # check if clock synchronised
         if time.monotonic() - sync_timer > 60:
             sync_timer = time.monotonic()
-            if os.path.exists ("/run/shm/sync.txt"):
-                os.remove("/run/shm/sync.txt")
-            os.system("timedatectl >> /run/shm/sync.txt")
-            try:
-                sync = []
-                with open("/run/shm/sync.txt", "r") as file:
-                    line = file.readline()
-                    while line:
-                        sync.append(line.strip())
-                        line = file.readline()
-                if sync[4] == "System clock synchronized: yes":
-                    synced = 1
-                else:
-                    synced = 0
-            except:
-                pass
+            check_clock_sync()
         # stop playing if end of album, in album mode
         #(remainTracks, currentTrack) = getAlbumTracksInfo(Track_No)
 
@@ -1473,24 +1512,8 @@ while True:
         if time.monotonic() - sleep_timer_start > sleep_timer and sleep_timer > 0:
             Disp_on = 1
             Disp_start = time.monotonic()
-            abort_sd = 0
-            t = 30
-            while t > 0 and abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("", "SHUTDOWN in " + str(t), "", "")
-                else:
-                    outputToDisplay("", "STOPPING in " + str(t), "", "")
-                if buttonFAVMODE.is_pressed:
-                    sleep_timer_start = time.monotonic()
-                    sleep_timer = 900
-                    abort_sd = 1
-                t -=1
-                time.sleep(1)
-            if abort_sd == 0:
-                if sleep_shutdn == 1:
-                    outputToDisplay("SHUTTING DOWN...", "", "", "")
-                else:
-                    outputToDisplay("STOPPING........", "", "", "")
+            aborted = run_sleep_timer_countdown()
+            if not aborted:
                 time.sleep(0.05)
                 time.sleep(3)
                 Disp_on = 0
@@ -1611,48 +1634,35 @@ while True:
   
 
                 # check for NEXT key when playing MP3
-                if buttonNEXT_action:
-                    if not buttonNEXT.is_pressed:   # perform actions when button released
-                        debugMsg("buttonNEXT: " + buttonNEXT_action)
-                        Disp_start = time.monotonic()
-                        Disp_on = 1
-                        os.killpg(p.pid, SIGTERM)                        
-                        if buttonNEXT_action == "PUSH":
-                            # push action
+                action = trkNEXT.wait_press_release()
+                if action:
+                    debugMsg("buttonNEXT: " + action)
+                    Disp_start = time.monotonic()
+                    Disp_on = 1
+                    os.killpg(p.pid, SIGTERM)
+                    if action == "PUSH":
+                        outputToDisplayFlashing("", "> NEXT TRACK", "", "")
+                        Track_No = selectNextTrack(Track_No)
+                    elif action == "HOLD":
+                        if player_mode == 0:
+                            if playFavourites:
+                                outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                Track_No = goToNextFavourite()
+                            else:
+                                outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
+                                Track_No = goToNextAlbum(Track_No)
+                        elif player_mode == 1:
+                            if playFavourites:
+                                outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
+                                Track_No = goToNextFavourite()
+                            else:
+                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                Track_No = goToRandomAlbum()
+                        else:
                             outputToDisplayFlashing("", "> NEXT TRACK", "", "")
                             Track_No = selectNextTrack(Track_No)
-                        elif buttonNEXT_action == "HOLD":
-                            # hold action
-                            if player_mode == 0:   # Album
-                                if playFavourites:
-                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
-                                    Track_No = goToNextFavourite()
-                                else:
-                                    outputToDisplayFlashing("", "> NEXT ALBUM", "", "")
-                                    Track_No = goToNextAlbum(Track_No)
-                            elif player_mode == 1:   # Album Rand
-                                if playFavourites:
-                                    outputToDisplayFlashing("", "> NEXT FAV ALBUM", "", "")
-                                    Track_No = goToNextFavourite()
-                                else:
-                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
-                                    Track_No = goToRandomAlbum()
-                            else:
-                                outputToDisplayFlashing("", "> NEXT TRACK", "", "")
-                                Track_No = selectNextTrack(Track_No)
-                        showTrackProgress(Track_No, "PLAY", -1)
-                        goToNextTrack = 0
-                        buttonNEXT_action = ""
-                else:                
-                    if buttonNEXT.is_pressed:    # perform actions when button held
-                        buttonNEXT_action = "PUSH"
-                        buttonNEXT_timer = time.monotonic()
-                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonNEXT_timer))
-                        while buttonNEXT.is_pressed and (time.monotonic() - buttonNEXT_timer) < buttonHold:
-                            pass
-                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonNEXT_timer))
-                        if (time.monotonic() - buttonNEXT_timer) > buttonHold:
-                            buttonNEXT_action = "HOLD"    
+                    showTrackProgress(Track_No, "PLAY", -1)
+                    goToNextTrack = 0
   
   
                 ##############      WHILE PLAYING PUSH - HOLD   |  WHILE STOPPED PUSH - HOLD
@@ -1664,47 +1674,35 @@ while True:
 
 
                 # check for PREV key when playing MP3
-                if buttonPREV_action:
-                    if not buttonPREV.is_pressed:
-                        debugMsg("buttonPREV: " + buttonPREV_action)
-                        Disp_start = time.monotonic()
-                        Disp_on = 1
-                        os.killpg(p.pid, SIGTERM)                        
-                        if buttonPREV_action == "PUSH":
-                            # push action
+                action = trkPREV.wait_press_release()
+                if action:
+                    debugMsg("buttonPREV: " + action)
+                    Disp_start = time.monotonic()
+                    Disp_on = 1
+                    os.killpg(p.pid, SIGTERM)
+                    if action == "PUSH":
+                        outputToDisplayFlashing("", "> PREV TRACK", "", "")
+                        Track_No = selectPrevTrack(Track_No)
+                    elif action == "HOLD":
+                        if player_mode == 0:
+                            if playFavourites:
+                                outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                Track_No = goToPrevFavourite()
+                            else:
+                                outputToDisplayFlashing("", "> PREV ALBUM", "", "")
+                                Track_No = goToPrevAlbum(Track_No)
+                        elif player_mode == 1:
+                            if playFavourites:
+                                outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
+                                Track_No = goToPrevFavourite()
+                            else:
+                                outputToDisplayFlashing("", "> RAND ALBUM", "", "")
+                                Track_No = goToRandomAlbum()
+                        else:
                             outputToDisplayFlashing("", "> PREV TRACK", "", "")
                             Track_No = selectPrevTrack(Track_No)
-                        elif buttonPREV_action == "HOLD":  # hold action
-                            if player_mode == 0:   # Album
-                                if playFavourites:
-                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
-                                    Track_No = goToPrevFavourite()
-                                else:
-                                    outputToDisplayFlashing("", "> PREV ALBUM", "", "")
-                                    Track_No = goToPrevAlbum(Track_No)                                    
-                            elif player_mode == 1:   # Album Rand
-                                if playFavourites:
-                                    outputToDisplayFlashing("", "> PREV FAV ALBUM", "", "")
-                                    Track_No = goToPrevFavourite()
-                                else:
-                                    outputToDisplayFlashing("", "> RAND ALBUM", "", "")
-                                    Track_No = goToRandomAlbum()
-                            else:                            
-                                outputToDisplayFlashing("", "> PREV TRACK", "", "")
-                                Track_No = selectPrevTrack(Track_No)
-                        showTrackProgress(Track_No, "PLAY", -1)
-                        goToNextTrack = 0
-                        buttonPREV_action = ""
-                else:                
-                    if buttonPREV.is_pressed:
-                        buttonPREV_action = "PUSH"
-                        buttonPREV_timer = time.monotonic()
-                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonPREV_timer))
-                        while buttonPREV.is_pressed and (time.monotonic() - buttonPREV_timer) < buttonHold:
-                            pass
-                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonPREV_timer))
-                        if (time.monotonic() - buttonPREV_timer) > buttonHold:
-                            buttonPREV_action = "HOLD"  
+                    showTrackProgress(Track_No, "PLAY", -1)
+                    goToNextTrack = 0
   
   
   
@@ -1731,25 +1729,12 @@ while True:
                 ######################################################################################
                              
                 # check for FAVMODE key when playing MP3
-                if buttonFAVMODE_action:
-                    if not buttonFAVMODE.is_pressed:
-                        debugMsg("buttonFAVMODE: " + buttonFAVMODE_action)
-                        if buttonFAVMODE_action == "PUSH":
-                            # add current album to favourites
-                            Disp_on = 1
-                            Disp_start = time.monotonic()
-                            add_removeCurrentAlbumFavs(Track_No)
-                        buttonFAVMODE_action = ""
-                else:                
-                    if buttonFAVMODE.is_pressed:
-                        buttonFAVMODE_action = "PUSH"
-                        buttonFAVMODE_timer = time.monotonic()
-                        #debugMsg("Interval 1: " + str(time.monotonic() - buttonFAVMODE_timer))
-                        while buttonFAVMODE.is_pressed and (time.monotonic() - buttonFAVMODE_timer) < buttonHold:
-                            pass
-                        #debugMsg("Interval 2: " + str(time.monotonic() - buttonFAVMODE_timer))
-                        if (time.monotonic() - buttonFAVMODE_timer) > buttonHold:
-                            buttonFAVMODE_action = "HOLD"
+                action = trkFAVMODE.wait_press_release()
+                if action == "PUSH":
+                    debugMsg("buttonFAVMODE: PUSH")
+                    Disp_on = 1
+                    Disp_start = time.monotonic()
+                    add_removeCurrentAlbumFavs(Track_No)
                       
                 
 
